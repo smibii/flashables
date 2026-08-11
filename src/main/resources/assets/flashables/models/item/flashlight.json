@@ -1,0 +1,25 @@
+{
+  "parent": "flashables:item/flashlight_base",
+  "textures": {
+    "0": "flashables:item/flashlight_default",
+    "particle": "flashables:item/flashlight_default"
+  },
+  "overrides": [
+    { "predicate": { "flashables:color": 1 },  "model": "flashables:item/flashlight_white" },
+    { "predicate": { "flashables:color": 2 },  "model": "flashables:item/flashlight_light_gray" },
+    { "predicate": { "flashables:color": 3 },  "model": "flashables:item/flashlight_gray" },
+    { "predicate": { "flashables:color": 4 },  "model": "flashables:item/flashlight_black" },
+    { "predicate": { "flashables:color": 5 },  "model": "flashables:item/flashlight_brown" },
+    { "predicate": { "flashables:color": 6 },  "model": "flashables:item/flashlight_red" },
+    { "predicate": { "flashables:color": 7 },  "model": "flashables:item/flashlight_orange" },
+    { "predicate": { "flashables:color": 8 },  "model": "flashables:item/flashlight_yellow" },
+    { "predicate": { "flashables:color": 9 },  "model": "flashables:item/flashlight_lime" },
+    { "predicate": { "flashables:color": 10 }, "model": "flashables:item/flashlight_green" },
+    { "predicate": { "flashables:color": 11 }, "model": "flashables:item/flashlight_cyan" },
+    { "predicate": { "flashables:color": 12 }, "model": "flashables:item/flashlight_light_blue" },
+    { "predicate": { "flashables:color": 13 }, "model": "flashables:item/flashlight_blue" },
+    { "predicate": { "flashables:color": 14 }, "model": "flashables:item/flashlight_purple" },
+    { "predicate": { "flashables:color": 15 }, "model": "flashables:item/flashlight_magenta" },
+    { "predicate": { "flashables:color": 16 }, "model": "flashables:item/flashlight_pink" }
+  ]
+}

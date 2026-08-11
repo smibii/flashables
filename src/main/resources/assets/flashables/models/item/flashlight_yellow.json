@@ -1,0 +1,7 @@
+{
+  "parent": "flashables:item/flashlight_base",
+  "textures": {
+    "0": "flashables:item/flashlight_yellow",
+    "particle": "flashables:item/flashlight_yellow"
+  }
+}

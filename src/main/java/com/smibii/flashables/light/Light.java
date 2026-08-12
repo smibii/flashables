@@ -14,7 +14,8 @@ public abstract class Light<T extends Light<T>> {
     private float radius = 10.0f;
     private boolean renderShadows = false;
     private boolean renderVolumetric = false;
-    private float volumetricIntensity = 1.0f;
+    private float volumetricStrength = 0.035f;
+    private float volumetricStep = 32f;
 
     private final Map<String, LightState> STATES = new HashMap<>();
     private String state;
@@ -50,8 +51,12 @@ public abstract class Light<T extends Light<T>> {
                 renderVolumetric(value != 0.0);
         });
 
-        property("volumetricIntensity", (value) -> {
-                volumetricIntensity = value.floatValue();
+        property("volumetricStrength", (value) -> {
+                volumetricStrength = value.floatValue();
+        });
+
+        property("volumetricStep", (value) -> {
+                volumetricStep = value.floatValue();
         });
     }
 
@@ -102,8 +107,13 @@ public abstract class Light<T extends Light<T>> {
         return self();
     }
 
-    public T volumetricIntensity(float volumetricIntensity) {
-        this.volumetricIntensity = volumetricIntensity;
+    public T volumetricStrength(float volumetricStrength) {
+        this.volumetricStrength = volumetricStrength;
+        return self();
+    }
+
+    public T volumetricStep(float volumetricStep) {
+        this.volumetricStep = volumetricStep;
         return self();
     }
 
@@ -163,5 +173,7 @@ public abstract class Light<T extends Light<T>> {
 
     public boolean isRenderVolumetric() { return renderVolumetric; }
 
-    public float getVolumetricIntensity() { return volumetricIntensity; }
+    public float getVolumetricStrength() { return volumetricStrength; }
+
+    public float getVolumetricStep() { return volumetricStep; }
 }

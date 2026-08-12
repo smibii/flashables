@@ -1,6 +1,5 @@
 package com.smibii.flashables.client.light;
 
-import com.smibii.flashables.client.render.shadow.ShadowMapPool;
 import com.smibii.flashables.light.PointLight;
 import com.smibii.flashables.light.SpotLight;
 
@@ -31,21 +30,11 @@ public final class LightRegistry {
 
     public static boolean removePointLight(PointLight light) {
         boolean removed = POINT_LIGHTS.remove(light);
-
-        if (removed) {
-            ShadowMapPool.release(light);
-        }
-
         return removed;
     }
 
     public static boolean removeSpotLight(SpotLight light) {
         boolean removed = SPOT_LIGHTS.remove(light);
-
-        if (removed) {
-            ShadowMapPool.release(light);
-        }
-
         return removed;
     }
 
@@ -96,7 +85,6 @@ public final class LightRegistry {
     public static void clear() {
         POINT_LIGHTS.clear();
         SPOT_LIGHTS.clear();
-        ShadowMapPool.clear();
     }
 
     public static void tick(double time) {

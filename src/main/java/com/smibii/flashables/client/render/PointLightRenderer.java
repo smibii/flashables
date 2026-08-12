@@ -3,14 +3,12 @@ package com.smibii.flashables.client.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.smibii.flashables.client.light.LightRegistry;
-import com.smibii.flashables.client.render.shadow.ShadowMapPool;
 import com.smibii.flashables.light.PointLight;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
-import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 
 /**
@@ -94,6 +92,8 @@ public final class PointLightRenderer {
         shader.getUniform("LightRadius").set(light.getRadius());
         shader.getUniform("LightHasShadows").set(light.isRenderShadows() ? 1.0f : 0.0f);
         shader.getUniform("LightVolumetric").set(light.isRenderVolumetric() ? 1.0f : 0.0f);
+        shader.getUniform("LightVolumetricStrength").set(light.getVolumetricStrength());
+        shader.getUniform("LightVolumetricStep").set(light.getVolumetricStep());
 
         float multiplier = LightEnvironment.getMultiplier(minecraft.level, position, light.getRadius());
         shader.getUniform("LightMultiplier").set(multiplier);
@@ -107,22 +107,6 @@ public final class PointLightRenderer {
         RenderSystem.activeTexture(GL13.GL_TEXTURE1);
         RenderSystem.bindTexture(SceneCopy.getTexture());
         shader.setSampler("SceneSampler", SceneCopy.getTexture());
-
-        int shadowTexture = ShadowMapPool.forPoint(light).getTexture();
-
-        /*
-         * ShadowSampler is a samplerCube, but RenderSystem.bindTexture()
-         * (and shader.setSampler(), which calls it internally on apply())
-         * always binds GL_TEXTURE_2D - binding a cubemap texture object
-         * through it throws GL_INVALID_OPERATION ("target doesn't match
-         * the texture's target") on every frame. The shader's sampler
-         * uniform is already wired to unit 2 from point_light.json's
-         * sampler order, so bind the cubemap to that unit directly and
-         * skip setSampler for this one.
-         */
-        RenderSystem.activeTexture(GL13.GL_TEXTURE2);
-        GL11.glBindTexture(GL13.GL_TEXTURE_CUBE_MAP, shadowTexture);
-        RenderSystem.activeTexture(GL13.GL_TEXTURE0);
 
         LightVolumeMesh.renderSphere(poseStack, light.getRadius());
 

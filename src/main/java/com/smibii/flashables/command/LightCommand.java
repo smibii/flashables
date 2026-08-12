@@ -65,6 +65,12 @@ public class LightCommand {
     private static final SubCommandBuilder POINT_VOLUMETRIC = POINT_INDEX.sub("volumetric");
     private static final ArgumentBuilder<Boolean> POINT_VOLUMETRIC_VALUE = POINT_VOLUMETRIC.argument("value", BoolArgumentType.bool());
 
+    private static final SubCommandBuilder POINT_VOLUMETRIC_STRENGTH = POINT_INDEX.sub("volumetric_strength");
+    private static final ArgumentBuilder<Float> POINT_VOLUMETRIC_STRENGTH_VALUE =POINT_VOLUMETRIC_STRENGTH.argument("value", FloatArgumentType.floatArg(0.0f));
+
+    private static final SubCommandBuilder POINT_VOLUMETRIC_STEP = POINT_INDEX.sub("volumetric_step");
+    private static final ArgumentBuilder<Float> POINT_VOLUMETRIC_STEP_VALUE = POINT_VOLUMETRIC_STEP.argument("value", FloatArgumentType.floatArg(0.0f));
+
     private static final SubCommandBuilder POINT_MOVETO = POINT_INDEX.sub("moveto");
 
     private static final SubCommandBuilder SPOT = ROOT.sub("spot");
@@ -86,6 +92,12 @@ public class LightCommand {
 
     private static final SubCommandBuilder SPOT_VOLUMETRIC = SPOT_INDEX.sub("volumetric");
     private static final ArgumentBuilder<Boolean> SPOT_VOLUMETRIC_VALUE = SPOT_VOLUMETRIC.argument("value", BoolArgumentType.bool());
+
+    private static final SubCommandBuilder SPOT_VOLUMETRIC_STRENGTH = SPOT_INDEX.sub("volumetric_strength");
+    private static final ArgumentBuilder<Float> SPOT_VOLUMETRIC_STRENGTH_VALUE = SPOT_VOLUMETRIC_STRENGTH.argument("value", FloatArgumentType.floatArg(0.0f));
+
+    private static final SubCommandBuilder SPOT_VOLUMETRIC_STEP = SPOT_INDEX.sub("volumetric_step");
+    private static final ArgumentBuilder<Float> SPOT_VOLUMETRIC_STEP_VALUE = SPOT_VOLUMETRIC_STEP.argument("value", FloatArgumentType.floatArg(0.0f));
 
     private static final SubCommandBuilder SPOT_ANGLE = SPOT_INDEX.sub("angle");
     private static final ArgumentBuilder<Float> SPOT_ANGLE_VALUE = SPOT_ANGLE.argument("value", FloatArgumentType.floatArg(1.0f, 89.0f));
@@ -123,6 +135,8 @@ public class LightCommand {
         POINT_COLOR_B.executes(LightCommand::pointColor);
         POINT_SHADOWS_VALUE.executes(LightCommand::pointShadows);
         POINT_VOLUMETRIC_VALUE.executes(LightCommand::pointVolumetric);
+        POINT_VOLUMETRIC_STRENGTH_VALUE.executes(LightCommand::pointVolumetricStrength);
+        POINT_VOLUMETRIC_STEP_VALUE.executes(LightCommand::pointVolumetricStep);
         POINT_MOVETO.executes(LightCommand::pointMoveTo);
 
         SPOT_RADIUS_VALUE.executes(LightCommand::spotRadius);
@@ -130,6 +144,8 @@ public class LightCommand {
         SPOT_COLOR_B.executes(LightCommand::spotColor);
         SPOT_SHADOWS_VALUE.executes(LightCommand::spotShadows);
         SPOT_VOLUMETRIC_VALUE.executes(LightCommand::spotVolumetric);
+        SPOT_VOLUMETRIC_STRENGTH_VALUE.executes(LightCommand::spotVolumetricStrength);
+        SPOT_VOLUMETRIC_STEP_VALUE.executes(LightCommand::spotVolumetricStep);
         SPOT_ANGLE_VALUE.executes(LightCommand::spotAngle);
         SPOT_LOOK.executes(LightCommand::spotLook);
         SPOT_TEXTURE_VALUE.executes(LightCommand::spotTexture);
@@ -239,8 +255,9 @@ public class LightCommand {
         PointLight light = resolvePoint(context);
         if (light == null) return CommandUtils.fail(source, "No such point light");
 
-        light.radius(FloatArgumentType.getFloat(context, "value"));
-        return CommandUtils.success(source, "Updated radius");
+        float value = FloatArgumentType.getFloat(context, "value");
+        light.radius(value);
+        return CommandUtils.success(source, "Set radius to " + value);
     }
 
     private static int pointIntensity(CommandContext<CommandSourceStack> context) {
@@ -248,8 +265,9 @@ public class LightCommand {
         PointLight light = resolvePoint(context);
         if (light == null) return CommandUtils.fail(source, "No such point light");
 
-        light.intensity(FloatArgumentType.getFloat(context, "value"));
-        return CommandUtils.success(source, "Updated intensity");
+        float value = FloatArgumentType.getFloat(context, "value");
+        light.intensity(value);
+        return CommandUtils.success(source, "Set intensity to " + value);
     }
 
     private static int pointColor(CommandContext<CommandSourceStack> context) {
@@ -257,12 +275,13 @@ public class LightCommand {
         PointLight light = resolvePoint(context);
         if (light == null) return CommandUtils.fail(source, "No such point light");
 
-        light.color(new Vector3f(
+        Vector3f value = new Vector3f(
                 FloatArgumentType.getFloat(context, "r"),
                 FloatArgumentType.getFloat(context, "g"),
                 FloatArgumentType.getFloat(context, "b")
-        ));
-        return CommandUtils.success(source, "Updated color");
+        );
+        light.color(value);
+        return CommandUtils.success(source, "Set color to " + value);
     }
 
     private static int pointShadows(CommandContext<CommandSourceStack> context) {
@@ -270,8 +289,9 @@ public class LightCommand {
         PointLight light = resolvePoint(context);
         if (light == null) return CommandUtils.fail(source, "No such point light");
 
-        light.renderShadows(BoolArgumentType.getBool(context, "value"));
-        return CommandUtils.success(source, "Updated shadows");
+        boolean value = BoolArgumentType.getBool(context, "value");
+        light.renderShadows(value);
+        return CommandUtils.success(source, "Set draw shadows to " + value);
     }
 
     private static int pointVolumetric(CommandContext<CommandSourceStack> context) {
@@ -279,8 +299,29 @@ public class LightCommand {
         PointLight light = resolvePoint(context);
         if (light == null) return CommandUtils.fail(source, "No such point light");
 
-        light.renderVolumetric(BoolArgumentType.getBool(context, "value"));
-        return CommandUtils.success(source, "Updated volumetric lighting");
+        boolean value = BoolArgumentType.getBool(context, "value");
+        light.renderVolumetric(value);
+        return CommandUtils.success(source, "Set volumetric lighting to " + value);
+    }
+
+    private static int pointVolumetricStrength(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        PointLight light = resolvePoint(context);
+        if (light == null) return CommandUtils.fail(source, "No such point light");
+
+        float value = FloatArgumentType.getFloat(context, "value");
+        light.volumetricStrength(value);
+        return CommandUtils.success(source, "Set volumetric strength to " + value);
+    }
+
+    private static int pointVolumetricStep(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        PointLight light = resolvePoint(context);
+        if (light == null) return CommandUtils.fail(source, "No such point light");
+
+        float value = FloatArgumentType.getFloat(context, "value");
+        light.volumetricStep(value);
+        return CommandUtils.success(source, "Set volumetric step to " + value);
     }
 
     private static int pointMoveTo(CommandContext<CommandSourceStack> context) {
@@ -292,7 +333,7 @@ public class LightCommand {
         if (light == null) return CommandUtils.fail(source, "No such point light");
 
         light.position(player.getEyePosition());
-        return CommandUtils.success(source, "Moved point light");
+        return CommandUtils.success(source, "Moved point light to " + player.getEyePosition());
     }
 
     private static int spotRadius(CommandContext<CommandSourceStack> context) {
@@ -300,8 +341,9 @@ public class LightCommand {
         SpotLight light = resolveSpot(context);
         if (light == null) return CommandUtils.fail(source, "No such spot light");
 
-        light.radius(FloatArgumentType.getFloat(context, "value"));
-        return CommandUtils.success(source, "Updated radius");
+        float value = FloatArgumentType.getFloat(context, "value");
+        light.radius(value);
+        return CommandUtils.success(source, "Set radius to " + value);
     }
 
     private static int spotIntensity(CommandContext<CommandSourceStack> context) {
@@ -309,8 +351,9 @@ public class LightCommand {
         SpotLight light = resolveSpot(context);
         if (light == null) return CommandUtils.fail(source, "No such spot light");
 
-        light.intensity(FloatArgumentType.getFloat(context, "value"));
-        return CommandUtils.success(source, "Updated intensity");
+        float value = FloatArgumentType.getFloat(context, "value");
+        light.intensity(value);
+        return CommandUtils.success(source, "Set intensity to " + value);
     }
 
     private static int spotColor(CommandContext<CommandSourceStack> context) {
@@ -318,12 +361,13 @@ public class LightCommand {
         SpotLight light = resolveSpot(context);
         if (light == null) return CommandUtils.fail(source, "No such spot light");
 
-        light.color(new Vector3f(
+        Vector3f value = new Vector3f(
                 FloatArgumentType.getFloat(context, "r"),
                 FloatArgumentType.getFloat(context, "g"),
                 FloatArgumentType.getFloat(context, "b")
-        ));
-        return CommandUtils.success(source, "Updated color");
+        );
+        light.color(value);
+        return CommandUtils.success(source, "Set color to " + value);
     }
 
     private static int spotShadows(CommandContext<CommandSourceStack> context) {
@@ -331,8 +375,9 @@ public class LightCommand {
         SpotLight light = resolveSpot(context);
         if (light == null) return CommandUtils.fail(source, "No such spot light");
 
-        light.renderShadows(BoolArgumentType.getBool(context, "value"));
-        return CommandUtils.success(source, "Updated shadows");
+        boolean value = BoolArgumentType.getBool(context, "value");
+        light.renderShadows(value);
+        return CommandUtils.success(source, "Set draw shadows to " + value);
     }
 
     private static int spotVolumetric(CommandContext<CommandSourceStack> context) {
@@ -340,17 +385,40 @@ public class LightCommand {
         SpotLight light = resolveSpot(context);
         if (light == null) return CommandUtils.fail(source, "No such spot light");
 
-        light.renderVolumetric(BoolArgumentType.getBool(context, "value"));
-        return CommandUtils.success(source, "Updated volumetric lighting");
+        boolean value = BoolArgumentType.getBool(context, "value");
+        light.renderVolumetric(value);
+        return CommandUtils.success(source, "Set volumetric lighting to " + value);
     }
+
+    private static int spotVolumetricStrength(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        SpotLight light = resolveSpot(context);
+        if (light == null) return CommandUtils.fail(source, "No such spot light");
+
+        float value = FloatArgumentType.getFloat(context, "value");
+        light.volumetricStrength(value);
+        return CommandUtils.success(source, "Set volumetric strength to " + value);
+    }
+
+    private static int spotVolumetricStep(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        SpotLight light = resolveSpot(context);
+        if (light == null) return CommandUtils.fail(source, "No such spot light");
+
+        float value = FloatArgumentType.getFloat(context, "value");
+        light.volumetricStep(value);
+        return CommandUtils.success(source, "Set volumetric step to " + value);
+    }
+
 
     private static int spotAngle(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
         SpotLight light = resolveSpot(context);
         if (light == null) return CommandUtils.fail(source, "No such spot light");
 
-        light.angle(FloatArgumentType.getFloat(context, "value"));
-        return CommandUtils.success(source, "Updated angle");
+        float value = FloatArgumentType.getFloat(context, "value");
+        light.angle(value);
+        return CommandUtils.success(source, "Set angle to " + value);
     }
 
     private static int spotLook(CommandContext<CommandSourceStack> context) {
@@ -373,7 +441,7 @@ public class LightCommand {
 
         ResourceLocation texture = ResourceLocationArgument.getId(context, "value");
         light.texture(texture);
-        return CommandUtils.success(source, "Updated projected texture");
+        return CommandUtils.success(source, "Set projected texture to " + texture);
     }
 
     private static int spotNoTexture(CommandContext<CommandSourceStack> context) {

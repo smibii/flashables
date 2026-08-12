@@ -1,19 +1,18 @@
 #version 150
 
+uniform float GameTime;
+
 uniform sampler2D DepthSampler;
 uniform sampler2D SceneSampler;
-uniform sampler2D ShadowSampler;
-uniform sampler2D ProjectedTexture;
+uniform samplerCube ShadowSampler;
 
 uniform mat4 ModelViewMat;
 uniform mat4 InvProjMat;
 uniform mat4 ProjMat;
 uniform mat4 InvViewMat;
-uniform mat4 LightShadowMat;
 
 uniform vec3 LightPositionView;
 uniform vec3 LightPositionWorld;
-uniform vec3 LightDirectionView;
 uniform vec3 LightColor;
 
 uniform float LightIntensity;
@@ -22,18 +21,14 @@ uniform float LightMultiplier;
 uniform float ShadowBias;
 uniform float LightHasShadows;
 uniform float LightVolumetric;
-uniform float LightAngleOuterCos;
-uniform float LightAngleInnerCos;
-uniform float HasProjectedTexture;
+uniform float LightVolumetricStrength;
+uniform float LightVolumetricStep;
 
 uniform vec3 CameraPositionWorld;
 
 uniform vec2 ScreenSize;
 
 out vec4 fragColor;
-
-const int VOLUMETRIC_STEPS = 16;
-const float VOLUMETRIC_STRENGTH = 0.035;
 
 vec3 reconstructViewPosition(vec2 uv, float depth)
 {
@@ -54,47 +49,48 @@ vec3 reconstructNormal(vec2 uv, vec3 position)
     return normalize(cross(tangentX, tangentY));
 }
 
-/*
- * Projects a world-space sample (relative to the light) into the
- * spot light's shadow/cookie frustum. Returns the UV in xy and
- * whether the sample lands inside the frustum in z (1.0 = inside).
- */
-vec3 projectToLightSpace(vec3 worldPosition)
+float linearizeShadowDepth(float depth)
 {
-    vec3 relative = worldPosition - LightPositionWorld;
-    vec4 clip = LightShadowMat * vec4(relative, 1.0);
-
-    if (clip.w <= 0.0)
-    {
-        return vec3(-1.0);
-    }
-
-    clip.xyz /= clip.w;
-
-    vec2 uv = 1.0 - (clip.xy * 0.5 + 0.5);;
-    float inside = (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) ? 1.0 : -1.0;
-
-    return vec3(uv, inside * (clip.z * 0.5 + 0.5 + 1.0));
+    float nearPlane = 0.05;
+    float farPlane = LightRadius;
+    float z = depth * 2.0 - 1.0;
+    return (2.0 * nearPlane * farPlane) / (farPlane + nearPlane - z * (farPlane - nearPlane));
 }
 
-float calculateShadow(vec3 worldPosition)
+float shadowDepthToDistance(vec3 direction, float depth)
+{
+    float forwardComponent = max(max(abs(direction.x), abs(direction.y)), abs(direction.z));
+    forwardComponent = max(forwardComponent, 0.0001);
+    float viewDepth = linearizeShadowDepth(depth);
+    return viewDepth / forwardComponent;
+}
+
+float calculateShadow(vec3 surfaceWorldPosition)
 {
     if (LightHasShadows < 0.5)
     {
         return 1.0;
     }
 
-    vec3 projected = projectToLightSpace(worldPosition);
+    vec3 toSurface = surfaceWorldPosition - LightPositionWorld;
+    float currentDistance = length(toSurface);
 
-    if (projected.z < 0.0)
+    if (currentDistance <= 0.001)
     {
         return 1.0;
     }
 
-    float currentDepth = projected.z - 1.0;
-    float storedDepth = texture(ShadowSampler, projected.xy).r;
+    vec3 direction = normalize(toSurface);
+    float shadowDepth = texture(ShadowSampler, direction).r;
 
-    if (currentDepth - ShadowBias > storedDepth)
+    if (shadowDepth >= 0.999999)
+    {
+        return 1.0;
+    }
+
+    float closestDistance = shadowDepthToDistance(direction, shadowDepth);
+
+    if (closestDistance < currentDistance - ShadowBias)
     {
         return 0.0;
     }
@@ -102,14 +98,28 @@ float calculateShadow(vec3 worldPosition)
     return 1.0;
 }
 
-float calculateSoftShadow(vec3 worldPosition)
+float calculateSoftShadow(vec3 surfaceWorldPosition)
 {
     if (LightHasShadows < 0.5)
     {
         return 1.0;
     }
 
-    vec2 texel = 1.0 / vec2(textureSize(ShadowSampler, 0));
+    vec3 toSurface = surfaceWorldPosition - LightPositionWorld;
+    float currentDistance = length(toSurface);
+
+    if (currentDistance <= 0.001)
+    {
+        return 1.0;
+    }
+
+    vec3 direction = normalize(toSurface);
+
+    vec3 up = abs(direction.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(up, direction));
+    vec3 bitangent = normalize(cross(direction, tangent));
+
+    float kernel = 0.0025 + 0.0075 * (currentDistance / LightRadius);
     float visible = 0.0;
 
     const int SAMPLES = 9;
@@ -120,55 +130,38 @@ float calculateSoftShadow(vec3 worldPosition)
     offsets[2] = vec2(-1.0, 0.0);
     offsets[3] = vec2(0.0, 1.0);
     offsets[4] = vec2(0.0, -1.0);
-    offsets[5] = vec2(1.0, 1.0);
-    offsets[6] = vec2(-1.0, 1.0);
-    offsets[7] = vec2(1.0, -1.0);
-    offsets[8] = vec2(-1.0, -1.0);
-
-    vec3 projected = projectToLightSpace(worldPosition);
-
-    if (projected.z < 0.0)
-    {
-        return 1.0;
-    }
-
-    float currentDepth = projected.z - 1.0;
+    offsets[5] = vec2(0.707, 0.707);
+    offsets[6] = vec2(-0.707, 0.707);
+    offsets[7] = vec2(0.707, -0.707);
+    offsets[8] = vec2(-0.707, -0.707);
 
     for (int i = 0; i < SAMPLES; i++)
     {
-        vec2 sampleUv = projected.xy + offsets[i] * texel * 1.5;
-        float storedDepth = texture(ShadowSampler, sampleUv).r;
+        vec3 sampleDirection =  normalize(
+                direction +
+                tangent *
+                offsets[i].x *
+                kernel +
+                bitangent *
+                offsets[i].y *
+                kernel);
+        float shadowDepth = texture(ShadowSampler, sampleDirection).r;
 
-        if (currentDepth - ShadowBias <= storedDepth)
+        if (shadowDepth >= 0.999999)
+        {
+            visible += 1.0;
+            continue;
+        }
+
+        float closestDistance = shadowDepthToDistance(sampleDirection, shadowDepth);
+
+        if (closestDistance >= currentDistance - ShadowBias)
         {
             visible += 1.0;
         }
     }
 
     return visible / float(SAMPLES);
-}
-
-float spotFalloff(vec3 toSurfaceView)
-{
-    float cosAngle = dot(toSurfaceView, normalize(LightDirectionView));
-    return smoothstep(LightAngleOuterCos, LightAngleInnerCos, cosAngle);
-}
-
-vec3 sampleCookie(vec3 worldPosition)
-{
-    if (HasProjectedTexture < 0.5)
-    {
-        return vec3(1.0);
-    }
-
-    vec3 projected = projectToLightSpace(worldPosition);
-
-    if (projected.z < 0.0)
-    {
-        return vec3(0.0);
-    }
-
-    return texture(ProjectedTexture, projected.xy).rgb;
 }
 
 bool intersectSphere(vec3 rayDir, vec3 center, float radius, out float t0, out float t1)
@@ -233,26 +226,26 @@ float fbm(vec3 p)
 {
     float value = 0.0;
     float amplitude = 0.5;
-    value += noise3D(p) * amplitude;
+    value += noise3D(p + GameTime * 100) * amplitude;
     p = p * 2.0 + vec3(17.0, 31.0, 11.0);
     amplitude *= 0.5;
-    value += noise3D(p) * amplitude;
+    value += noise3D(p + GameTime * 10) * amplitude;
     p = p * 2.0 + vec3(7.0, 19.0, 23.0);
     amplitude *= 0.5;
-    value += noise3D(p) * amplitude;
+    value += noise3D(p - GameTime * 100) * amplitude;
     p = p * 2.0 + vec3(29.0, 13.0, 37.0);
     amplitude *= 0.5;
-    value += noise3D(p) * amplitude;
+    value += noise3D(p - GameTime * 100) * amplitude;
     return value / 0.9375;
 }
 
 float fogDensity(vec3 worldPosition)
 {
-    float large = fbm(worldPosition * 0.025);
-    float detail = fbm(worldPosition * 0.075 +vec3(31.7, 17.2, 9.4));
-    float density = large * 0.75 + detail * 0.25;
+    float large = fbm(worldPosition * 0.6);
+    float detail = fbm(worldPosition * 0.01 + vec3(31.7, 17.2, 9.4));
+    float density = (large * 0.75 + detail * 0.25);
     density = smoothstep(0.42, 0.68, density);
-    return density;
+    return max(density, 0.3);
 }
 
 vec3 calculateVolumetric(
@@ -277,12 +270,12 @@ vec3 calculateVolumetric(
         return vec3(0.0);
     }
 
-    float stepSize = (t1 - t0) / float(VOLUMETRIC_STEPS);
+    float stepSize = (t1 - t0) / float(LightVolumetricStep);
     float jitter = hash(uv * 0.35);
     vec3 accum = vec3(0.0);
     float transmittance = 1.0;
 
-    for (int i = 0; i < VOLUMETRIC_STEPS; i++)
+    for (int i = 0; i < LightVolumetricStep; i++)
     {
         float t = t0 + stepSize * (float(i) + jitter * 0.35);
         vec3 samplePosition = rayDir * t;
@@ -295,16 +288,9 @@ vec3 calculateVolumetric(
         }
 
         vec3 lightToSample = normalize(toLight);
-        float spot = spotFalloff(lightToSample);
-
-        if (spot <= 0.0)
-        {
-            continue;
-        }
-
         vec4 worldSample = InvViewMat * vec4(samplePosition, 1.0);
         vec3 worldPosition = worldSample.xyz + CameraPositionWorld;
-        float density = fogDensity(worldPosition);
+        float density = max(fogDensity(worldPosition), 0.3);
 
         if (density <= 0.001)
         {
@@ -314,13 +300,12 @@ vec3 calculateVolumetric(
         float attenuation = 1.0 - distanceToLight / LightRadius;
         attenuation *= attenuation;
         float shadow = calculateShadow(worldPosition);
-        vec3 cookie = sampleCookie(worldPosition);
-        float lighting = attenuation * spot * shadow * density;
-        vec3 sampleLight = LightColor * cookie * lighting;
+        float lighting = attenuation * shadow * density;
+        vec3 sampleLight = LightColor * lighting;
         float extinction = density * stepSize * 0.12;
         float sampleTransmittance = exp(-extinction);
 
-        accum += transmittance * sampleLight * stepSize * VOLUMETRIC_STRENGTH * LightIntensity * LightMultiplier;
+        accum += transmittance * sampleLight * stepSize * LightVolumetricStrength * LightIntensity * LightMultiplier;
         transmittance *= sampleTransmittance;
 
         if (transmittance < 0.01)
@@ -330,14 +315,14 @@ vec3 calculateVolumetric(
     }
 
     /*
-         * Unclamped, this scales with LightIntensity/LightMultiplier
-         * (multiplier alone goes up to 5x - see LightEnvironment) and
-         * stepSize (grows with LightRadius), so it can add up to well
-         * past "fully bright" before it ever reaches the screen-blend in
-         * main(). Screen blend only stays within [0,1] if both inputs
-         * already are, so an unbounded value here overshoots even harder
-         * than plain addition would - cap it here instead.
-         */
+     * Unclamped, this scales with LightIntensity/LightMultiplier
+     * (multiplier alone goes up to 5x - see LightEnvironment) and
+     * stepSize (grows with LightRadius), so it can add up to well
+     * past "fully bright" before it ever reaches the screen-blend in
+     * main(). Screen blend only stays within [0,1] if both inputs
+     * already are, so an unbounded value here overshoots even harder
+     * than plain addition would - cap it here instead.
+     */
     return min(accum, vec3(1.0));
 }
 
@@ -363,15 +348,13 @@ void main()
         vec3 lightDirection = normalize(LightPositionView - surfacePosition);
         float NdotL = max(dot(normal, lightDirection), 0.0);
         float distanceToLight = distance(surfacePosition, LightPositionView);
-        vec3 toSurface = normalize(surfacePosition - LightPositionView);
-        float spot = spotFalloff(toSurface);
 
-        if ((distanceToLight >= LightRadius || spot <= 0.0) && LightVolumetric < 0.5)
+        if (distanceToLight >= LightRadius && LightVolumetric < 0.5)
         {
             discard;
         }
 
-        if (distanceToLight < LightRadius && spot > 0.0)
+        if (distanceToLight < LightRadius)
         {
             float attenuation = 1.0 - distanceToLight / LightRadius;
             attenuation *= attenuation;
@@ -379,10 +362,9 @@ void main()
             vec4 worldPosition = InvViewMat * vec4(surfacePosition, 1.0);
             vec3 surfaceWorldPosition = worldPosition.xyz + CameraPositionWorld;
             float shadow = calculateSoftShadow(surfaceWorldPosition);
-            vec3 cookie = sampleCookie(surfaceWorldPosition);
-            float amount = NdotL * attenuation * spot * LightIntensity * LightMultiplier * shadow;
+            float amount = NdotL * attenuation * LightIntensity * LightMultiplier * shadow;
 
-            vec3 lightColor = LightColor * cookie * amount;
+            vec3 lightColor = LightColor * amount;
             contribution = step(vec3(0.5), baseColor) *
             (vec3(1.0) - 2.0 *
             (vec3(1.0) - baseColor) *

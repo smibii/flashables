@@ -10,9 +10,6 @@
       "name": "SceneSampler"
     },
     {
-      "name": "ShadowSampler"
-    },
-    {
       "name": "ProjectedTexture"
     }
   ],
@@ -22,6 +19,13 @@
   ],
 
   "uniforms": [
+    {
+      "name": "GameTime",
+      "type": "float",
+      "count": 1,
+      "values": [1.0]
+    },
+
     {
       "name": "ModelViewMat",
       "type": "matrix4x4",
@@ -60,18 +64,6 @@
 
     {
       "name": "InvViewMat",
-      "type": "matrix4x4",
-      "count": 16,
-      "values": [
-        1.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0,
-        0.0, 0.0, 1.0, 0.0,
-        0.0, 0.0, 0.0, 1.0
-      ]
-    },
-
-    {
-      "name": "LightShadowMat",
       "type": "matrix4x4",
       "count": 16,
       "values": [
@@ -139,13 +131,6 @@
     },
 
     {
-      "name": "ShadowBias",
-      "type": "float",
-      "count": 1,
-      "values": [0.0015]
-    },
-
-    {
       "name": "LightHasShadows",
       "type": "float",
       "count": 1,
@@ -157,6 +142,20 @@
       "type": "float",
       "count": 1,
       "values": [0.0]
+    },
+
+    {
+      "name": "LightVolumetricStrength",
+      "type": "float",
+      "count": 1,
+      "values": [0.035]
+    },
+
+    {
+      "name": "LightVolumetricStep",
+      "type": "float",
+      "count": 1,
+      "values": [16.0]
     },
 
     {

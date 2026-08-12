@@ -1,7 +1,6 @@
 package com.smibii.flashables.client.render;
 
 import com.smibii.flashables.client.light.LightRegistry;
-import com.smibii.flashables.client.render.shadow.ShadowPassRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -20,19 +19,6 @@ public final class LightingRenderer {
     @SubscribeEvent
     public static void render(RenderLevelStageEvent event) {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
-            return;
-        }
-
-        /*
-         * A shadow map's own renderLevel() call (see ShadowPassRenderer)
-         * fires this same stage again while it's mid-render. Skip our
-         * pass entirely then - drawing light volumes into a shadow
-         * map's framebuffer/viewport/projection would corrupt the
-         * shadow pass and, since it happens once per cubemap face per
-         * shadow-casting light, tank the frame rate hard enough to
-         * look like the renderer is stuck.
-         */
-        if (ShadowPassRenderer.isActive()) {
             return;
         }
 

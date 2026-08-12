@@ -1,5 +1,7 @@
 #version 150
 
+uniform float GameTime;
+
 uniform sampler2D DepthSampler;
 uniform sampler2D SceneSampler;
 uniform samplerCube ShadowSampler;
@@ -19,15 +21,14 @@ uniform float LightMultiplier;
 uniform float ShadowBias;
 uniform float LightHasShadows;
 uniform float LightVolumetric;
+uniform float LightVolumetricStrength;
+uniform float LightVolumetricStep;
 
 uniform vec3 CameraPositionWorld;
 
 uniform vec2 ScreenSize;
 
 out vec4 fragColor;
-
-const int VOLUMETRIC_STEPS = 16;
-const float VOLUMETRIC_STRENGTH = 0.035;
 
 vec3 reconstructViewPosition(vec2 uv, float depth)
 {
@@ -225,26 +226,26 @@ float fbm(vec3 p)
 {
     float value = 0.0;
     float amplitude = 0.5;
-    value += noise3D(p) * amplitude;
+    value += noise3D(p + GameTime * 100) * amplitude;
     p = p * 2.0 + vec3(17.0, 31.0, 11.0);
     amplitude *= 0.5;
-    value += noise3D(p) * amplitude;
+    value += noise3D(p + GameTime * 10) * amplitude;
     p = p * 2.0 + vec3(7.0, 19.0, 23.0);
     amplitude *= 0.5;
-    value += noise3D(p) * amplitude;
+    value += noise3D(p - GameTime * 100) * amplitude;
     p = p * 2.0 + vec3(29.0, 13.0, 37.0);
     amplitude *= 0.5;
-    value += noise3D(p) * amplitude;
+    value += noise3D(p - GameTime * 100) * amplitude;
     return value / 0.9375;
 }
 
 float fogDensity(vec3 worldPosition)
 {
-    float large = fbm(worldPosition * 0.025);
-    float detail = fbm(worldPosition * 0.075 +vec3(31.7, 17.2, 9.4));
-    float density = large * 0.75 + detail * 0.25;
+    float large = fbm(worldPosition * 0.6);
+    float detail = fbm(worldPosition * 0.01 + vec3(31.7, 17.2, 9.4));
+    float density = (large * 0.75 + detail * 0.25);
     density = smoothstep(0.42, 0.68, density);
-    return density;
+    return max(density, 0.3);
 }
 
 vec3 calculateVolumetric(
@@ -269,12 +270,12 @@ vec3 calculateVolumetric(
         return vec3(0.0);
     }
 
-    float stepSize = (t1 - t0) / float(VOLUMETRIC_STEPS);
+    float stepSize = (t1 - t0) / float(LightVolumetricStep);
     float jitter = hash(uv * 0.35);
     vec3 accum = vec3(0.0);
     float transmittance = 1.0;
 
-    for (int i = 0; i < VOLUMETRIC_STEPS; i++)
+    for (int i = 0; i < LightVolumetricStep; i++)
     {
         float t = t0 + stepSize * (float(i) + jitter * 0.35);
         vec3 samplePosition = rayDir * t;
@@ -304,7 +305,7 @@ vec3 calculateVolumetric(
         float extinction = density * stepSize * 0.12;
         float sampleTransmittance = exp(-extinction);
 
-        accum += transmittance * sampleLight * stepSize * VOLUMETRIC_STRENGTH * LightIntensity * LightMultiplier;
+        accum += transmittance * sampleLight * stepSize * LightVolumetricStrength * LightIntensity * LightMultiplier;
         transmittance *= sampleTransmittance;
 
         if (transmittance < 0.01)

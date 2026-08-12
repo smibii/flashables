@@ -3,9 +3,6 @@ package com.smibii.flashables.client.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.smibii.flashables.client.light.LightRegistry;
-import com.smibii.flashables.client.render.shadow.ShadowMapPool;
-import com.smibii.flashables.client.render.shadow.ShadowPassRenderer;
-import com.smibii.flashables.client.render.shadow.SpotLightShadowMap;
 import com.smibii.flashables.light.SpotLight;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -13,7 +10,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
-import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 
 /**
@@ -71,8 +67,6 @@ public final class SpotLightRenderer {
         Matrix4f inverseModelView = new Matrix4f(modelView).invert();
         Matrix4f inverseProjection = new Matrix4f(projection).invert();
 
-        SpotLightShadowMap shadowMap = ShadowMapPool.forSpot(light);
-
         /*
          * See PointLightRenderer.renderLight() - the shader outputs
          * the fully composited scene color, not a delta, so this
@@ -89,7 +83,6 @@ public final class SpotLightRenderer {
         shader.getUniform("ProjMat").set(projection);
         shader.getUniform("InvViewMat").set(inverseModelView);
         shader.getUniform("InvProjMat").set(inverseProjection);
-        shader.getUniform("LightShadowMat").set(shadowMap.getShadowMat());
         shader.getUniform("LightPositionView").set(lightView.x, lightView.y, lightView.z);
         shader.getUniform("LightPositionWorld").set((float) position.x, (float) position.y, (float) position.z);
         shader.getUniform("LightDirectionView").set(directionView.x, directionView.y, directionView.z);
@@ -98,6 +91,8 @@ public final class SpotLightRenderer {
         shader.getUniform("LightRadius").set(light.getRadius());
         shader.getUniform("LightHasShadows").set(light.isRenderShadows() ? 1.0f : 0.0f);
         shader.getUniform("LightVolumetric").set(light.isRenderVolumetric() ? 1.0f : 0.0f);
+        shader.getUniform("LightVolumetricStrength").set(light.getVolumetricStrength());
+        shader.getUniform("LightVolumetricStep").set(light.getVolumetricStep());
 
         float outerAngle = Math.max(1.0f, light.getAngle());
         /*
@@ -126,10 +121,6 @@ public final class SpotLightRenderer {
         RenderSystem.activeTexture(GL13.GL_TEXTURE1);
         RenderSystem.bindTexture(SceneCopy.getTexture());
         shader.setSampler("SceneSampler", SceneCopy.getTexture());
-
-        RenderSystem.activeTexture(GL13.GL_TEXTURE2);
-        RenderSystem.bindTexture(shadowMap.getTexture());
-        shader.setSampler("ShadowSampler", shadowMap.getTexture());
 
         ResourceLocation cookie = light.getTexture();
 

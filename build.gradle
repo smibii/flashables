@@ -87,11 +87,13 @@ repositories {
             includeGroup "maven.modrinth"
         }
     }
+    maven { url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1" }
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    runtimeOnly("me.djtheredstoner:DevAuth-forge-latest:1.2.2")
 
     implementation fg.deobf("maven.modrinth:sk9rgfiA:UTbfe5d1") // Embedium
     implementation fg.deobf("maven.modrinth:GchcoXML:iQ1SwGc3") // Oculus

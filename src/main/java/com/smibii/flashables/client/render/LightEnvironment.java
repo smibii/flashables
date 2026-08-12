@@ -45,7 +45,7 @@ public final class LightEnvironment {
             progress = 0.0f;
         }
 
-        return 1.0f + (progress * 4.0f);
+        return 2.0f + (progress * 2.5f);
     }
 
     private static boolean isSkyExposed(Level level, BlockPos pos, int maxDistance) {

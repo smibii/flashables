@@ -8,9 +8,6 @@
     },
     {
       "name": "SceneSampler"
-    },
-    {
-      "name": "ShadowSampler"
     }
   ],
 
@@ -19,6 +16,13 @@
   ],
 
   "uniforms": [
+    {
+      "name": "GameTime",
+      "type": "float",
+      "count": 1,
+      "values": [1.0]
+    },
+
     {
       "name": "ModelViewMat",
       "type": "matrix4x4",
@@ -71,108 +75,84 @@
       "name": "LightPositionView",
       "type": "float",
       "count": 3,
-      "values": [
-        0.0,
-        0.0,
-        0.0
-      ]
+      "values": [0.0, 0.0, 0.0]
     },
 
     {
       "name": "LightPositionWorld",
       "type": "float",
       "count": 3,
-      "values": [
-        0.0,
-        0.0,
-        0.0
-      ]
+      "values": [0.0, 0.0, 0.0]
     },
 
     {
       "name": "LightColor",
       "type": "float",
       "count": 3,
-      "values": [
-        1.0,
-        1.0,
-        1.0
-      ]
+      "values": [1.0, 1.0, 1.0]
     },
 
     {
       "name": "LightIntensity",
       "type": "float",
       "count": 1,
-      "values": [
-        1.0
-      ]
+      "values": [1.0]
     },
 
     {
       "name": "LightRadius",
       "type": "float",
       "count": 1,
-      "values": [
-        10.0
-      ]
+      "values": [10.0]
     },
 
     {
       "name": "LightMultiplier",
       "type": "float",
       "count": 1,
-      "values": [
-        1.0
-      ]
+      "values": [1.0]
     },
 
     {
       "name": "CameraPositionWorld",
       "type": "float",
       "count": 3,
-      "values": [
-        0.0,
-        0.0,
-        0.0
-      ]
-    },
-
-    {
-      "name": "ShadowBias",
-      "type": "float",
-      "count": 1,
-      "values": [
-        0.08
-      ]
+      "values": [0.0, 0.0, 0.0]
     },
 
     {
       "name": "LightHasShadows",
       "type": "float",
       "count": 1,
-      "values": [
-        1.0
-      ]
+      "values": [1.0]
     },
 
     {
       "name": "LightVolumetric",
       "type": "float",
       "count": 1,
-      "values": [
-        0.0
-      ]
+      "values": [0.0]
+    },
+
+    {
+      "name": "LightVolumetricStrength",
+      "type": "float",
+      "count": 1,
+      "values": [0.035]
+    },
+
+    {
+      "name": "LightVolumetricStep",
+      "type": "float",
+      "count": 1,
+      "values": [16.0]
     },
 
     {
       "name": "ScreenSize",
       "type": "float",
       "count": 2,
-      "values": [
-        1920.0,
-        1080.0
-      ]
+      "values": [1920.0, 1080.0]
     }
   ]
 }

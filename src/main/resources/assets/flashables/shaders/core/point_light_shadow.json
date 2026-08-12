@@ -1,10 +1,9 @@
 {
-  "vertex": "flashables:dynamic_lighting",
-  "fragment": "flashables:dynamic_lighting",
+  "vertex": "point_light_shadow",
+  "fragment": "point_light_shadow",
   "attributes": [
     "Position"
   ],
-  "samplers": [],
   "uniforms": [
     {
       "name": "ModelViewMat",

@@ -4,9 +4,12 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.smibii.flashables.client.light.LightRegistry;
 import com.smibii.flashables.client.render.shadow.ShadowMapPool;
-import com.smibii.flashables.light.PointLight;
+import com.smibii.flashables.client.render.shadow.ShadowPassRenderer;
+import com.smibii.flashables.client.render.shadow.SpotLightShadowMap;
+import com.smibii.flashables.light.SpotLight;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
@@ -14,15 +17,16 @@ import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 
 /**
- * Draws every {@link PointLight} currently in the {@link LightRegistry}.
- * Invoked by {@link LightingRenderer}, once per frame, after the depth
- * buffer has already been snapshotted for the frame.
+ * Draws every {@link SpotLight} currently in the {@link LightRegistry}.
+ * Mirrors {@link PointLightRenderer}, but adds cone falloff, a
+ * perspective (non-cube) shadow map, and an optional projected
+ * "cookie" texture.
  */
-public final class PointLightRenderer {
-    private PointLightRenderer() {}
+public final class SpotLightRenderer {
+    private SpotLightRenderer() {}
 
     public static void renderAll(PoseStack poseStack, float partialTick) {
-        ShaderInstance shader = PointLightShader.POINT_LIGHT;
+        ShaderInstance shader = SpotLightShader.SPOT_LIGHT;
 
         if (shader == null) {
             return;
@@ -34,11 +38,7 @@ public final class PointLightRenderer {
             return;
         }
 
-        for (PointLight light : LightRegistry.getPointLights()) {
-            /*
-             * Re-snapshot the scene so this light's contribution
-             * builds on top of every light rendered before it.
-             */
+        for (SpotLight light : LightRegistry.getSpotLights()) {
             SceneCopy.copy();
 
             renderLight(minecraft, poseStack, shader, light);
@@ -49,22 +49,29 @@ public final class PointLightRenderer {
             Minecraft minecraft,
             PoseStack poseStack,
             ShaderInstance shader,
-            PointLight light
+            SpotLight light
     ) {
         Vec3 camera = minecraft.gameRenderer.getMainCamera().getPosition();
         Vec3 position = light.getPosition();
+        Vec3 direction = light.getDirection().normalize();
 
         float lightX = (float) (position.x - camera.x);
         float lightY = (float) (position.y - camera.y);
         float lightZ = (float) (position.z - camera.z);
 
         Matrix4f modelView = poseStack.last().pose();
+
         Vector4f lightView = new Vector4f(lightX, lightY, lightZ, 1.0f);
         modelView.transform(lightView);
+
+        Vector4f directionView = new Vector4f((float) direction.x, (float) direction.y, (float) direction.z, 0.0f);
+        modelView.transform(directionView);
 
         Matrix4f projection = RenderSystem.getProjectionMatrix();
         Matrix4f inverseModelView = new Matrix4f(modelView).invert();
         Matrix4f inverseProjection = new Matrix4f(projection).invert();
+
+        SpotLightShadowMap shadowMap = ShadowMapPool.forSpot(light);
 
         RenderSystem.enableBlend();
         RenderSystem.blendFunc(GL11.GL_SRC_ALPHA_SATURATE, GL11.GL_ONE_MINUS_SRC_ALPHA);
@@ -78,13 +85,20 @@ public final class PointLightRenderer {
         shader.getUniform("ProjMat").set(projection);
         shader.getUniform("InvViewMat").set(inverseModelView);
         shader.getUniform("InvProjMat").set(inverseProjection);
+        shader.getUniform("LightShadowMat").set(shadowMap.getShadowMat());
         shader.getUniform("LightPositionView").set(lightView.x, lightView.y, lightView.z);
         shader.getUniform("LightPositionWorld").set((float) position.x, (float) position.y, (float) position.z);
+        shader.getUniform("LightDirectionView").set(directionView.x, directionView.y, directionView.z);
         shader.getUniform("LightColor").set(light.getColor().x, light.getColor().y, light.getColor().z);
         shader.getUniform("LightIntensity").set(light.getIntensity());
         shader.getUniform("LightRadius").set(light.getRadius());
         shader.getUniform("LightHasShadows").set(light.isRenderShadows() ? 1.0f : 0.0f);
         shader.getUniform("LightVolumetric").set(light.isRenderVolumetric() ? 1.0f : 0.0f);
+
+        float outerAngle = Math.max(1.0f, light.getAngle());
+        float innerAngle = outerAngle * 0.85f;
+        shader.getUniform("LightAngleOuterCos").set((float) Math.cos(Math.toRadians(outerAngle)));
+        shader.getUniform("LightAngleInnerCos").set((float) Math.cos(Math.toRadians(innerAngle)));
 
         float multiplier = LightEnvironment.getMultiplier(minecraft.level, position, light.getRadius());
         shader.getUniform("LightMultiplier").set(multiplier);
@@ -99,21 +113,22 @@ public final class PointLightRenderer {
         RenderSystem.bindTexture(SceneCopy.getTexture());
         shader.setSampler("SceneSampler", SceneCopy.getTexture());
 
-        int shadowTexture = ShadowMapPool.forPoint(light).getTexture();
-
-        /*
-         * ShadowSampler is a samplerCube, but RenderSystem.bindTexture()
-         * (and shader.setSampler(), which calls it internally on apply())
-         * always binds GL_TEXTURE_2D - binding a cubemap texture object
-         * through it throws GL_INVALID_OPERATION ("target doesn't match
-         * the texture's target") on every frame. The shader's sampler
-         * uniform is already wired to unit 2 from point_light.json's
-         * sampler order, so bind the cubemap to that unit directly and
-         * skip setSampler for this one.
-         */
         RenderSystem.activeTexture(GL13.GL_TEXTURE2);
-        GL11.glBindTexture(GL13.GL_TEXTURE_CUBE_MAP, shadowTexture);
-        RenderSystem.activeTexture(GL13.GL_TEXTURE0);
+        RenderSystem.bindTexture(shadowMap.getTexture());
+        shader.setSampler("ShadowSampler", shadowMap.getTexture());
+
+        ResourceLocation cookie = light.getTexture();
+
+        if (cookie != null) {
+            int cookieTexture = minecraft.getTextureManager().getTexture(cookie).getId();
+
+            RenderSystem.activeTexture(GL13.GL_TEXTURE3);
+            RenderSystem.bindTexture(cookieTexture);
+            shader.setSampler("ProjectedTexture", cookieTexture);
+            shader.getUniform("HasProjectedTexture").set(1.0f);
+        } else {
+            shader.getUniform("HasProjectedTexture").set(0.0f);
+        }
 
         LightVolumeMesh.renderSphere(poseStack, light.getRadius());
 

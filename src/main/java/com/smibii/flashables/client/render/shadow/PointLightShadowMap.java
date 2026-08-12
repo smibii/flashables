@@ -3,65 +3,76 @@ package com.smibii.flashables.client.render.shadow;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
-import com.smibii.flashables.client.render.PointLightRenderer;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.block.BlockRenderDispatcher;
-import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
-import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.core.BlockPos;
-import net.minecraft.util.Mth;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
-import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL32;
 
-import java.util.List;
+import java.nio.IntBuffer;
 
+/**
+ * Six-face depth cubemap used for a single point light's shadows.
+ * Every point light in the {@link com.smibii.flashables.client.light.LightRegistry}
+ * owns its own instance (see {@link ShadowMapPool}), since shadow maps
+ * for every light must exist at once: they're all rendered up front,
+ * in {@link ShadowPassRenderer}, before the frame's normal level
+ * render begins, then just sampled while drawing each light's volume.
+ * Unlike the spot light map, no shadow-space matrix is exposed: the
+ * point light fragment shader samples this cubemap directly by
+ * direction from the light instead of a projected UV.
+ */
 public class PointLightShadowMap {
-    /*
-     * Cubemap face resolution. Memory scales with the
-     * square of this value, times 6 faces, times the
-     * depth format's byte size below - so this is by
-     * far the biggest lever for VRAM usage. 512 is
-     * plenty for a shadow that's only ever seen at the
-     * scale of a handheld light's radius; bump it back
-     * up only if you can actually see banding/aliasing
-     * on the shadow edges.
-     */
-    public static final int SIZE = 512;
+    public static final int SIZE = 1024;
 
     private static final float NEAR_PLANE = 0.05f;
 
-    private static int framebuffer = -1;
-    private static int depthCubemap = -1;
+    /*
+     * Shared across every instance: only one shadow map is ever being
+     * rendered at a time (sequentially, on the render thread), so a
+     * single reusable shadow camera is enough.
+     */
+    private static final ShadowCamera SHADOW_CAMERA = new ShadowCamera();
 
-    private static boolean initialized = false;
+    private int framebuffer = -1;
+    private int depthCubemap = -1;
 
-    private static final RandomSource RANDOM = RandomSource.create();
+    private boolean initialized = false;
+    private boolean rendering = false;
 
-    private PointLightShadowMap() {
+    public boolean isRendering() {
+        return rendering;
     }
 
-    public static void init() {
+    public void init() {
+
         if (initialized) {
             return;
         }
 
         if (!RenderSystem.isOnRenderThread()) {
-            RenderSystem.recordRenderCall(PointLightShadowMap::init);
+
+            RenderSystem.recordRenderCall(
+                    this::init
+            );
+
             return;
         }
 
-        depthCubemap = GL11.glGenTextures();
+        /*
+         * ------------------------------------------------
+         * Create depth cubemap
+         * ------------------------------------------------
+         */
+
+        depthCubemap =
+                GL11.glGenTextures();
 
         GL11.glBindTexture(
                 GL32.GL_TEXTURE_CUBE_MAP,
@@ -69,24 +80,16 @@ public class PointLightShadowMap {
         );
 
         for (int face = 0; face < 6; face++) {
-            /*
-             * 16-bit depth instead of 24-bit: half the
-             * memory per texel. The shadow's near/far
-             * range is just [0.05, lightRadius], which
-             * is small enough that 16 bits of precision
-             * is not a visible difference here, and the
-             * shader's ShadowBias already covers the
-             * extra rounding error.
-             */
+
             GL11.glTexImage2D(
                     GL32.GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
                     0,
-                    GL14.GL_DEPTH_COMPONENT16,
+                    GL30.GL_DEPTH_COMPONENT24,
                     SIZE,
                     SIZE,
                     0,
                     GL11.GL_DEPTH_COMPONENT,
-                    GL11.GL_FLOAT,
+                    GL11.GL_UNSIGNED_INT,
                     0
             );
         }
@@ -94,13 +97,13 @@ public class PointLightShadowMap {
         GL11.glTexParameteri(
                 GL32.GL_TEXTURE_CUBE_MAP,
                 GL11.GL_TEXTURE_MIN_FILTER,
-                GL11.GL_NEAREST
+                GL11.GL_LINEAR
         );
 
         GL11.glTexParameteri(
                 GL32.GL_TEXTURE_CUBE_MAP,
                 GL11.GL_TEXTURE_MAG_FILTER,
-                GL11.GL_NEAREST
+                GL11.GL_LINEAR
         );
 
         GL11.glTexParameteri(
@@ -126,12 +129,25 @@ public class PointLightShadowMap {
                 0
         );
 
-        framebuffer = GL30.glGenFramebuffers();
+        /*
+         * ------------------------------------------------
+         * Framebuffer
+         * ------------------------------------------------
+         */
+
+        framebuffer =
+                GL30.glGenFramebuffers();
 
         GL30.glBindFramebuffer(
                 GL30.GL_FRAMEBUFFER,
                 framebuffer
         );
+
+        /*
+         * Attach the first face initially.
+         * renderFace() changes the attachment for
+         * every cubemap direction.
+         */
 
         GL30.glFramebufferTexture2D(
                 GL30.GL_FRAMEBUFFER,
@@ -141,21 +157,25 @@ public class PointLightShadowMap {
                 0
         );
 
-        GL11.glDrawBuffer(GL11.GL_NONE);
-        GL11.glReadBuffer(GL11.GL_NONE);
-
-        int status = GL30.glCheckFramebufferStatus(
-                GL30.GL_FRAMEBUFFER
+        GL11.glDrawBuffer(
+                GL11.GL_NONE
         );
 
-        if (status != GL30.GL_FRAMEBUFFER_COMPLETE) {
-            GL30.glBindFramebuffer(
-                    GL30.GL_FRAMEBUFFER,
-                    0
-            );
+        GL11.glReadBuffer(
+                GL11.GL_NONE
+        );
+
+        int status =
+                GL30.glCheckFramebufferStatus(
+                        GL30.GL_FRAMEBUFFER
+                );
+
+        if (status !=
+                GL30.GL_FRAMEBUFFER_COMPLETE) {
 
             throw new IllegalStateException(
-                    "Point light shadow framebuffer incomplete: " + status
+                    "Point light shadow framebuffer incomplete: "
+                            + status
             );
         }
 
@@ -167,16 +187,26 @@ public class PointLightShadowMap {
         initialized = true;
     }
 
-    public static void render(float partialTick) {
+    /**
+     * Renders the six-face depth cubemap for this point light. Must
+     * only be called from {@link ShadowPassRenderer}, before the
+     * frame's normal level render starts - calling this from inside
+     * a {@code RenderLevelStageEvent} would recursively re-enter
+     * {@code LevelRenderer.renderLevel()} mid-frame, which corrupts
+     * Oculus/Iris's per-frame terrain layer state and crashes.
+     */
+    public void render(Vec3 light, float radius, float partialTick) {
         if (!RenderSystem.isOnRenderThread()) {
+            return;
+        }
+
+        if (rendering) {
             return;
         }
 
         Minecraft minecraft = Minecraft.getInstance();
 
-        Level level = minecraft.level;
-
-        if (level == null) {
+        if (minecraft.level == null) {
             return;
         }
 
@@ -184,206 +214,290 @@ public class PointLightShadowMap {
             init();
         }
 
-        Vec3 light = PointLightRenderer.LIGHT.getPosition();
+        rendering = true;
 
-        float radius = PointLightRenderer.LIGHT.getRadius();
+        try {
+            /*
+             * ------------------------------------------------
+             * Save OpenGL state
+             * ------------------------------------------------
+             */
 
-        /*
-         * Gathered once here rather than inside
-         * renderFace() - a world query is the same
-         * result for all six faces, so doing it six
-         * times per frame would just be wasted CPU
-         * time for no extra shadow accuracy.
-         */
-        AABB bounds = new AABB(
-                light.x - radius,
-                light.y - radius,
-                light.z - radius,
-                light.x + radius,
-                light.y + radius,
-                light.z + radius
-        );
+            Matrix4f oldProjection =
+                    new Matrix4f(
+                            RenderSystem.getProjectionMatrix()
+                    );
 
-        List<Entity> entities = level.getEntities(
-                (Entity) null,
-                bounds,
-                entity -> shouldCastShadow(entity, light)
-        );
+            int oldFramebuffer =
+                    GL11.glGetInteger(
+                            GL30.GL_FRAMEBUFFER_BINDING
+                    );
 
-        int oldFramebuffer = GL11.glGetInteger(
-                GL30.GL_FRAMEBUFFER_BINDING
-        );
+            /*
+             * glGetInteger cannot read individual viewport
+             * components. Use glGetIntegerv().
+             */
 
-        int[] viewport = new int[4];
+            IntBuffer viewport =
+                    BufferUtils.createIntBuffer(4);
 
-        GL11.glGetIntegerv(
-                GL11.GL_VIEWPORT,
-                viewport
-        );
+            GL11.glGetIntegerv(
+                    GL11.GL_VIEWPORT,
+                    viewport
+            );
 
-        boolean depthTest = GL11.glIsEnabled(
-                GL11.GL_DEPTH_TEST
-        );
+            int oldViewportX =
+                    viewport.get(0);
 
-        boolean cull = GL11.glIsEnabled(
-                GL11.GL_CULL_FACE
-        );
+            int oldViewportY =
+                    viewport.get(1);
 
-        boolean blend = GL11.glIsEnabled(
-                GL11.GL_BLEND
-        );
+            int oldViewportWidth =
+                    viewport.get(2);
 
-        /*
-         * The six faces below each overwrite
-         * RenderSystem's projection matrix with a
-         * 90 degree shadow-face projection. That is
-         * global state, not something scoped to our
-         * framebuffer, so it must be saved here and
-         * restored once all faces are done or every
-         * draw call for the rest of the frame will
-         * keep using the shadow projection.
-         */
-        Matrix4f savedProjectionMatrix = new Matrix4f(
-                RenderSystem.getProjectionMatrix()
-        );
+            int oldViewportHeight =
+                    viewport.get(3);
 
-        GL30.glBindFramebuffer(
-                GL30.GL_FRAMEBUFFER,
-                framebuffer
-        );
+            boolean depthTest =
+                    GL11.glIsEnabled(
+                            GL11.GL_DEPTH_TEST
+                    );
 
-        GL11.glViewport(
-                0,
-                0,
-                SIZE,
-                SIZE
-        );
+            boolean cull =
+                    GL11.glIsEnabled(
+                            GL11.GL_CULL_FACE
+                    );
 
-        RenderSystem.enableDepthTest();
-        RenderSystem.depthMask(true);
-        RenderSystem.disableBlend();
-        RenderSystem.enableCull();
+            boolean blend =
+                    GL11.glIsEnabled(
+                            GL11.GL_BLEND
+                    );
 
-        GL11.glColorMask(
-                false,
-                false,
-                false,
-                false
-        );
+            /*
+             * ------------------------------------------------
+             * Bind shadow framebuffer
+             * ------------------------------------------------
+             */
 
-        /*
-         * Render all six directions.
-         */
-        renderFace(
-                level,
-                entities,
-                light,
-                radius,
-                0,
-                partialTick
-        );
+            GL30.glBindFramebuffer(
+                    GL30.GL_FRAMEBUFFER,
+                    framebuffer
+            );
 
-        renderFace(
-                level,
-                entities,
-                light,
-                radius,
-                1,
-                partialTick
-        );
+            GL11.glViewport(
+                    0,
+                    0,
+                    SIZE,
+                    SIZE
+            );
 
-        renderFace(
-                level,
-                entities,
-                light,
-                radius,
-                2,
-                partialTick
-        );
-
-        renderFace(
-                level,
-                entities,
-                light,
-                radius,
-                3,
-                partialTick
-        );
-
-        renderFace(
-                level,
-                entities,
-                light,
-                radius,
-                4,
-                partialTick
-        );
-
-        renderFace(
-                level,
-                entities,
-                light,
-                radius,
-                5,
-                partialTick
-        );
-
-        /*
-         * Restore state.
-         */
-        RenderSystem.setProjectionMatrix(
-                savedProjectionMatrix,
-                VertexSorting.DISTANCE_TO_ORIGIN
-        );
-
-        GL30.glBindFramebuffer(
-                GL30.GL_FRAMEBUFFER,
-                oldFramebuffer
-        );
-
-        GL11.glViewport(
-                viewport[0],
-                viewport[1],
-                viewport[2],
-                viewport[3]
-        );
-
-        GL11.glColorMask(
-                true,
-                true,
-                true,
-                true
-        );
-
-        if (depthTest) {
             RenderSystem.enableDepthTest();
-        } else {
-            RenderSystem.disableDepthTest();
-        }
+            RenderSystem.depthMask(true);
 
-        if (cull) {
-            RenderSystem.enableCull();
-        } else {
-            RenderSystem.disableCull();
-        }
-
-        if (blend) {
-            RenderSystem.enableBlend();
-        } else {
             RenderSystem.disableBlend();
-        }
+            RenderSystem.enableCull();
 
-        RenderSystem.depthMask(true);
+            /*
+             * We only render depth.
+             */
+
+            GL11.glColorMask(
+                    false,
+                    false,
+                    false,
+                    false
+            );
+
+            GameRenderer gameRenderer =
+                    minecraft.gameRenderer;
+
+            LightTexture lightTexture =
+                    gameRenderer.lightTexture();
+
+            /*
+             * ------------------------------------------------
+             * 90 degree projection
+             * ------------------------------------------------
+             */
+
+            Matrix4f projection =
+                    new Matrix4f()
+                            .perspective(
+                                    (float)
+                                            Math.toRadians(
+                                                    90.0
+                                            ),
+                                    1.0f,
+                                    NEAR_PLANE,
+                                    radius
+                            );
+
+            RenderSystem.setProjectionMatrix(
+                    projection,
+                    VertexSorting.DISTANCE_TO_ORIGIN
+            );
+
+            /*
+             * ------------------------------------------------
+             * Render all six cubemap faces
+             * ------------------------------------------------
+             *
+             * OpenGL cubemap directions:
+             *
+             * +X
+             * -X
+             * +Y
+             * -Y
+             * +Z
+             * -Z
+             */
+
+            renderFace(
+                    minecraft,
+                    light,
+                    lightTexture,
+                    gameRenderer,
+                    projection,
+                    partialTick,
+                    0,
+                    90.0f,
+                    0.0f
+            );
+
+            renderFace(
+                    minecraft,
+                    light,
+                    lightTexture,
+                    gameRenderer,
+                    projection,
+                    partialTick,
+                    1,
+                    -90.0f,
+                    0.0f
+            );
+
+            renderFace(
+                    minecraft,
+                    light,
+                    lightTexture,
+                    gameRenderer,
+                    projection,
+                    partialTick,
+                    2,
+                    0.0f,
+                    -90.0f
+            );
+
+            renderFace(
+                    minecraft,
+                    light,
+                    lightTexture,
+                    gameRenderer,
+                    projection,
+                    partialTick,
+                    3,
+                    0.0f,
+                    90.0f
+            );
+
+            renderFace(
+                    minecraft,
+                    light,
+                    lightTexture,
+                    gameRenderer,
+                    projection,
+                    partialTick,
+                    4,
+                    0.0f,
+                    0.0f
+            );
+
+            renderFace(
+                    minecraft,
+                    light,
+                    lightTexture,
+                    gameRenderer,
+                    projection,
+                    partialTick,
+                    5,
+                    180.0f,
+                    0.0f
+            );
+
+            /*
+             * ------------------------------------------------
+             * Restore framebuffer
+             * ------------------------------------------------
+             */
+
+            GL30.glBindFramebuffer(
+                    GL30.GL_FRAMEBUFFER,
+                    oldFramebuffer
+            );
+
+            GL11.glViewport(
+                    oldViewportX,
+                    oldViewportY,
+                    oldViewportWidth,
+                    oldViewportHeight
+            );
+
+            GL11.glColorMask(
+                    true,
+                    true,
+                    true,
+                    true
+            );
+
+            RenderSystem.setProjectionMatrix(
+                    oldProjection,
+                    VertexSorting.DISTANCE_TO_ORIGIN
+            );
+
+            /*
+             * Restore GL state.
+             */
+
+            if (depthTest) {
+                RenderSystem.enableDepthTest();
+            } else {
+                RenderSystem.disableDepthTest();
+            }
+
+            if (cull) {
+                RenderSystem.enableCull();
+            } else {
+                RenderSystem.disableCull();
+            }
+
+            if (blend) {
+                RenderSystem.enableBlend();
+            } else {
+                RenderSystem.disableBlend();
+            }
+
+            RenderSystem.depthMask(true);
+        } finally {
+            rendering = false;
+        }
     }
 
-    private static void renderFace(
-            Level level,
-            List<Entity> entities,
+    private void renderFace(
+            Minecraft minecraft,
             Vec3 light,
-            float radius,
+            LightTexture lightTexture,
+            GameRenderer gameRenderer,
+            Matrix4f projection,
+            float partialTick,
             int face,
-            float partialTick
+            float yaw,
+            float pitch
     ) {
+
+        /*
+         * Attach the correct cubemap face.
+         */
+
         GL30.glFramebufferTexture2D(
                 GL30.GL_FRAMEBUFFER,
                 GL30.GL_DEPTH_ATTACHMENT,
@@ -392,349 +506,84 @@ public class PointLightShadowMap {
                 0
         );
 
-        GL11.glDrawBuffer(GL11.GL_NONE);
-        GL11.glReadBuffer(GL11.GL_NONE);
+        GL11.glDrawBuffer(
+                GL11.GL_NONE
+        );
+
+        GL11.glReadBuffer(
+                GL11.GL_NONE
+        );
 
         GL11.glClear(
                 GL11.GL_DEPTH_BUFFER_BIT
         );
 
         /*
-         * Create the 90 degree camera projection.
+         * Configure our custom camera.
          */
-        Matrix4f projection = new Matrix4f()
-                .perspective(
-                        (float) Math.toRadians(90.0),
-                        1.0f,
-                        NEAR_PLANE,
-                        radius
-                );
 
-        RenderSystem.setProjectionMatrix(
-                projection,
-                VertexSorting.DISTANCE_TO_ORIGIN
+        SHADOW_CAMERA.setup(
+                minecraft.level,
+                minecraft.player,
+                false,
+                false,
+                partialTick
         );
 
-        /*
-         * Camera direction for this cubemap face.
-         */
-        Matrix4f view = createViewMatrix(face);
-
-        RenderSystem.getModelViewStack().pushPose();
-
-        RenderSystem.getModelViewStack()
-                .last()
-                .pose()
-                .set(view);
-
-        RenderSystem.applyModelViewMatrix();
-
-        /*
-         * Blocks and entities share one PoseStack and
-         * one buffer source so both flush together in
-         * a single endBatch() call below, instead of
-         * each maintaining and flushing its own.
-         */
-        PoseStack poseStack = new PoseStack();
-
-        MultiBufferSource.BufferSource bufferSource =
-                Minecraft.getInstance()
-                        .renderBuffers()
-                        .bufferSource();
-
-        renderBlocks(
-                level,
-                light,
-                radius,
-                poseStack,
-                bufferSource
-        );
-
-        renderEntities(
-                entities,
-                light,
-                partialTick,
-                poseStack,
-                bufferSource
-        );
-
-        bufferSource.endBatch();
-
-        RenderSystem.getModelViewStack().popPose();
-
-        RenderSystem.applyModelViewMatrix();
-    }
-
-    private static Matrix4f createViewMatrix(int face) {
-        Matrix4f matrix = new Matrix4f();
-
-        switch (face) {
-            /*
-             * +X
-             */
-            case 0 -> matrix
-                    .rotateY((float) Math.toRadians(90.0));
-
-            /*
-             * -X
-             */
-            case 1 -> matrix
-                    .rotateY((float) Math.toRadians(-90.0));
-
-            /*
-             * +Y
-             */
-            case 2 -> matrix
-                    .rotateX((float) Math.toRadians(-90.0));
-
-            /*
-             * -Y
-             */
-            case 3 -> matrix
-                    .rotateX((float) Math.toRadians(90.0));
-
-            /*
-             * +Z
-             */
-            case 4 -> matrix
-                    .rotateY((float) Math.toRadians(180.0));
-
-            /*
-             * -Z
-             *
-             * No rotation needed - the camera's default
-             * forward direction (-Z) already matches
-             * this face, so identity is correct here.
-             */
-            case 5 -> {
-            }
-
-            default -> {
-            }
-        }
-
-        return matrix;
-    }
-
-    private static void renderBlocks(
-            Level level,
-            Vec3 light,
-            float radius,
-            PoseStack poseStack,
-            MultiBufferSource.BufferSource bufferSource
-    ) {
-        Minecraft minecraft = Minecraft.getInstance();
-
-        BlockRenderDispatcher blockRenderer =
-                minecraft.getBlockRenderer();
-
-        int minX = (int) Math.floor(light.x - radius);
-        int maxX = (int) Math.ceil(light.x + radius);
-
-        int minY = Math.max(
-                level.getMinBuildHeight(),
-                (int) Math.floor(light.y - radius)
-        );
-
-        int maxY = Math.min(
-                level.getMaxBuildHeight(),
-                (int) Math.ceil(light.y + radius)
-        );
-
-        int minZ = (int) Math.floor(light.z - radius);
-        int maxZ = (int) Math.ceil(light.z + radius);
-
-        BlockPos.MutableBlockPos pos =
-                new BlockPos.MutableBlockPos();
-
-        for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                for (int z = minZ; z <= maxZ; z++) {
-
-                    double dx = x + 0.5 - light.x;
-                    double dy = y + 0.5 - light.y;
-                    double dz = z + 0.5 - light.z;
-
-                    if (dx * dx + dy * dy + dz * dz >
-                            radius * radius) {
-                        continue;
-                    }
-
-                    pos.set(
-                            x,
-                            y,
-                            z
-                    );
-
-                    BlockState state =
-                            level.getBlockState(pos);
-
-                    if (state.isAir()) {
-                        continue;
-                    }
-
-                    if (!state.isSolidRender(
-                            level,
-                            pos
-                    )) {
-                        continue;
-                    }
-
-                    /*
-                     * Translate world coordinates relative
-                     * to the point light.
-                     */
-                    poseStack.pushPose();
-
-                    poseStack.translate(
-                            x - light.x,
-                            y - light.y,
-                            z - light.z
-                    );
-
-                    RANDOM.setSeed(
-                            BlockPos.asLong(
-                                    x,
-                                    y,
-                                    z
-                            )
-                    );
-
-                    blockRenderer.renderSingleBlock(
-                            state,
-                            poseStack,
-                            bufferSource,
-                            15728880,
-                            OverlayTexture.NO_OVERLAY
-                    );
-
-                    poseStack.popPose();
-                }
-            }
-        }
-    }
-
-    /*
-     * Any entity this close to the light is almost
-     * certainly the thing carrying/generating the
-     * light itself (or standing right on top of it).
-     * At that range every limb sits nearly edge-on to
-     * the light, so its silhouette projects as long,
-     * thin, near-degenerate wedges - the light is
-     * basically grazing along the model instead of
-     * lighting it face-on. Excluding anything this
-     * close avoids that self-shadow starburst without
-     * needing to know which specific entity owns the
-     * light.
-     */
-    private static final double MIN_ENTITY_SHADOW_DISTANCE_SQ = 1.5 * 1.5;
-
-    private static boolean shouldCastShadow(Entity entity, Vec3 light) {
-        /*
-         * Invisible entities (potions, vanished
-         * players, etc.) shouldn't leave a shadow
-         * behind them, and anything already dead/
-         * removed this tick has no business being
-         * drawn at all.
-         */
-        if (!entity.isAlive() || entity.isInvisible()) {
-            return false;
-        }
-
-        return entity.distanceToSqr(
+        SHADOW_CAMERA.setPosition(
                 light.x,
                 light.y,
                 light.z
-        ) > MIN_ENTITY_SHADOW_DISTANCE_SQ;
+        );
+
+        SHADOW_CAMERA.setRotation(
+                yaw,
+                pitch
+        );
+
+        /*
+         * Tell Minecraft's entity renderer which
+         * camera is currently rendering.
+         */
+
+        minecraft.getEntityRenderDispatcher()
+                .prepare(
+                        minecraft.level,
+                        SHADOW_CAMERA,
+                        minecraft.player
+                );
+
+        /*
+         * Render the level from the light.
+         */
+
+        PoseStack poseStack =
+                new PoseStack();
+
+        minecraft.levelRenderer.renderLevel(
+                poseStack,
+                partialTick,
+                minecraft.level.getGameTime(),
+                false,
+                SHADOW_CAMERA,
+                gameRenderer,
+                lightTexture,
+                projection
+        );
     }
 
-    private static void renderEntities(
-            List<Entity> entities,
-            Vec3 light,
-            float partialTick,
-            PoseStack poseStack,
-            MultiBufferSource.BufferSource bufferSource
-    ) {
-        if (entities.isEmpty()) {
-            return;
-        }
-
-        EntityRenderDispatcher entityRenderer =
-                Minecraft.getInstance()
-                        .getEntityRenderDispatcher();
-
-        for (Entity entity : entities) {
-            double entityX = Mth.lerp(
-                    partialTick,
-                    entity.xOld,
-                    entity.getX()
-            );
-
-            double entityY = Mth.lerp(
-                    partialTick,
-                    entity.yOld,
-                    entity.getY()
-            );
-
-            double entityZ = Mth.lerp(
-                    partialTick,
-                    entity.zOld,
-                    entity.getZ()
-            );
-
-            float yaw = Mth.lerp(
-                    partialTick,
-                    entity.yRotO,
-                    entity.getYRot()
-            );
-
-            /*
-             * Same trick as the blocks: the shadow
-             * "camera" sits at the light with a
-             * rotation-only view matrix, so entities
-             * need to be positioned relative to the
-             * light rather than relative to the
-             * player camera.
-             */
-            entityRenderer.render(
-                    entity,
-                    entityX - light.x,
-                    entityY - light.y,
-                    entityZ - light.z,
-                    yaw,
-                    partialTick,
-                    poseStack,
-                    bufferSource,
-                    15728880
-            );
-        }
-    }
-
-    public static int getTexture() {
+    public int getTexture() {
         return depthCubemap;
     }
 
-    public static int getFramebuffer() {
-        return framebuffer;
-    }
+    public void destroy() {
 
-    public static int getSize() {
-        return SIZE;
-    }
-
-    public static float getNearPlane() {
-        return NEAR_PLANE;
-    }
-
-    public static void destroy() {
-        if (!RenderSystem.isOnRenderThread()) {
-            RenderSystem.recordRenderCall(
-                    PointLightShadowMap::destroy
-            );
+        if (!initialized) {
             return;
         }
 
         if (depthCubemap != -1) {
+
             GL11.glDeleteTextures(
                     depthCubemap
             );
@@ -743,6 +592,7 @@ public class PointLightShadowMap {
         }
 
         if (framebuffer != -1) {
+
             GL30.glDeleteFramebuffers(
                     framebuffer
             );
@@ -751,5 +601,25 @@ public class PointLightShadowMap {
         }
 
         initialized = false;
+    }
+
+    /*
+     * Custom camera used exclusively for shadow rendering.
+     */
+    private static class ShadowCamera extends Camera {
+        public void setPosition(
+                double x,
+                double y,
+                double z
+        ) {
+            super.setPosition(x, y, z);
+        }
+
+        public void setRotation(
+                float yaw,
+                float pitch
+        ) {
+            super.setRotation(yaw, pitch);
+        }
     }
 }

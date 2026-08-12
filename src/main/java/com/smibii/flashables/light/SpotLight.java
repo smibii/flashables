@@ -4,8 +4,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 
 public class SpotLight extends Light<SpotLight> {
-    private Vec3 direction;
-    private float angle;
+    private Vec3 direction = new Vec3(0.0, -1.0, 0.0);
+    private float angle = 45.0f;
     private ResourceLocation texture;
 
     @Override
@@ -27,22 +27,22 @@ public class SpotLight extends Light<SpotLight> {
         );
     }
 
-    public Light<SpotLight> direction(double x, double y, double z) {
+    public SpotLight direction(double x, double y, double z) {
         this.direction = new Vec3(x, y, z);
         return this;
     }
 
-    public Light<SpotLight> direction(Vec3 direction) {
+    public SpotLight direction(Vec3 direction) {
         this.direction = direction;
         return this;
     }
 
-    public Light<SpotLight> angle(float angle) {
+    public SpotLight angle(float angle) {
         this.angle = angle;
         return this;
     }
 
-    public Light<SpotLight> texture(ResourceLocation texture) {
+    public SpotLight texture(ResourceLocation texture) {
         this.texture = texture;
         return this;
     }

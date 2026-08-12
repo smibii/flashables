@@ -12,7 +12,9 @@ public abstract class Light<T extends Light<T>> {
     private Vector3f color = new Vector3f(1.0f, 1.0f, 1.0f);
     private float intensity = 1.0f;
     private float radius = 10.0f;
-    private boolean renderShadows = true;
+    private boolean renderShadows = false;
+    private boolean renderVolumetric = false;
+    private float volumetricIntensity = 1.0f;
 
     private final Map<String, LightState> STATES = new HashMap<>();
     private String state;
@@ -43,6 +45,14 @@ public abstract class Light<T extends Light<T>> {
         property("shadows", (value) ->
                 renderShadows(value != 0.0)
         );
+
+        property("volumetric", (value) -> {
+                renderVolumetric(value != 0.0);
+        });
+
+        property("volumetricIntensity", (value) -> {
+                volumetricIntensity = value.floatValue();
+        });
     }
 
     protected void property(
@@ -84,6 +94,16 @@ public abstract class Light<T extends Light<T>> {
 
     public T renderShadows(boolean renderShadows) {
         this.renderShadows = renderShadows;
+        return self();
+    }
+
+    public T renderVolumetric(boolean renderVolumetric) {
+        this.renderVolumetric = renderVolumetric;
+        return self();
+    }
+
+    public T volumetricIntensity(float volumetricIntensity) {
+        this.volumetricIntensity = volumetricIntensity;
         return self();
     }
 
@@ -140,4 +160,8 @@ public abstract class Light<T extends Light<T>> {
     public boolean isRenderShadows() {
         return renderShadows;
     }
+
+    public boolean isRenderVolumetric() { return renderVolumetric; }
+
+    public float getVolumetricIntensity() { return volumetricIntensity; }
 }

@@ -21,9 +21,9 @@ public class PointLightShadowRenderer {
         rendering = true;
 
         try {
-            PointLightShadowMap.render(
-                    event.getPartialTick()
-            );
+//            PointLightShadowMap.render(
+//                    event.getPartialTick()
+//            );
         } finally {
             rendering = false;
         }

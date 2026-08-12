@@ -186,7 +186,72 @@ float hash(vec2 uv)
     return fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-vec3 calculateVolumetric(vec2 uv, vec3 rayDir, float maxDistance)
+float hash3(vec3 p)
+{
+    p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+
+float noise3D(vec3 p)
+{
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+
+    f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+
+    float n000 = hash3(i + vec3(0.0, 0.0, 0.0));
+    float n100 = hash3(i + vec3(1.0, 0.0, 0.0));
+    float n010 = hash3(i + vec3(0.0, 1.0, 0.0));
+    float n110 = hash3(i + vec3(1.0, 1.0, 0.0));
+
+    float n001 = hash3(i + vec3(0.0, 0.0, 1.0));
+    float n101 = hash3(i + vec3(1.0, 0.0, 1.0));
+    float n011 = hash3(i + vec3(0.0, 1.0, 1.0));
+    float n111 = hash3(i + vec3(1.0, 1.0, 1.0));
+
+    float x00 = mix(n000, n100, f.x);
+    float x10 = mix(n010, n110, f.x);
+    float x01 = mix(n001, n101, f.x);
+    float x11 = mix(n011, n111, f.x);
+
+    float y0 = mix(x00, x10, f.y);
+    float y1 = mix(x01, x11, f.y);
+
+    return mix(y0, y1, f.z);
+}
+
+float fbm(vec3 p)
+{
+    float value = 0.0;
+    float amplitude = 0.5;
+    value += noise3D(p) * amplitude;
+    p = p * 2.0 + vec3(17.0, 31.0, 11.0);
+    amplitude *= 0.5;
+    value += noise3D(p) * amplitude;
+    p = p * 2.0 + vec3(7.0, 19.0, 23.0);
+    amplitude *= 0.5;
+    value += noise3D(p) * amplitude;
+    p = p * 2.0 + vec3(29.0, 13.0, 37.0);
+    amplitude *= 0.5;
+    value += noise3D(p) * amplitude;
+    return value / 0.9375;
+}
+
+float fogDensity(vec3 worldPosition)
+{
+    float large = fbm(worldPosition * 0.025);
+    float detail = fbm(worldPosition * 0.075 +vec3(31.7, 17.2, 9.4));
+    float density = large * 0.75 + detail * 0.25;
+    density = smoothstep(0.42, 0.68, density);
+    return density;
+}
+
+vec3 calculateVolumetric(
+        vec2 uv,
+        vec3 rayDir,
+        float maxDistance
+)
 {
     float t0;
     float t1;
@@ -204,29 +269,51 @@ vec3 calculateVolumetric(vec2 uv, vec3 rayDir, float maxDistance)
         return vec3(0.0);
     }
 
-    float jitter = hash(uv);
     float stepSize = (t1 - t0) / float(VOLUMETRIC_STEPS);
-
+    float jitter = hash(uv * 0.35);
     vec3 accum = vec3(0.0);
+    float transmittance = 1.0;
 
     for (int i = 0; i < VOLUMETRIC_STEPS; i++)
     {
-        float t = t0 + stepSize * (float(i) + jitter);
+        float t = t0 + stepSize * (float(i) + jitter * 0.35);
         vec3 samplePosition = rayDir * t;
+        vec3 toLight = samplePosition - LightPositionView;
+        float distanceToLight = length(toLight);
 
-        float distanceToLight = distance(samplePosition, LightPositionView);
-        float attenuation = clamp(1.0 - distanceToLight / LightRadius, 0.0, 1.0);
-        attenuation *= attenuation;
+        if (distanceToLight >= LightRadius)
+        {
+            continue;
+        }
 
+        vec3 lightToSample = normalize(toLight);
         vec4 worldSample = InvViewMat * vec4(samplePosition, 1.0);
-        vec3 worldSamplePosition = worldSample.xyz + CameraPositionWorld;
+        vec3 worldPosition = worldSample.xyz + CameraPositionWorld;
+        float density = max(fogDensity(worldPosition), 0.3);
 
-        float shadow = calculateShadow(worldSamplePosition);
+        if (density <= 0.001)
+        {
+            continue;
+        }
 
-        accum += LightColor * attenuation * shadow;
+        float attenuation = 1.0 - distanceToLight / LightRadius;
+        attenuation *= attenuation;
+        float shadow = calculateShadow(worldPosition);
+        float lighting = attenuation * shadow * density;
+        vec3 sampleLight = LightColor * lighting;
+        float extinction = density * stepSize * 0.12;
+        float sampleTransmittance = exp(-extinction);
+
+        accum += transmittance * sampleLight * stepSize * VOLUMETRIC_STRENGTH * LightIntensity * LightMultiplier;
+        transmittance *= sampleTransmittance;
+
+        if (transmittance < 0.01)
+        {
+            break;
+        }
     }
 
-    return accum * stepSize * VOLUMETRIC_STRENGTH * LightIntensity * LightMultiplier;
+    return accum;
 }
 
 void main()
@@ -281,7 +368,7 @@ void main()
 
     if (LightVolumetric >= 0.5)
     {
-        float maxDistance = hasSurface ? length(reconstructViewPosition(uv, depth)) : 1e6;
+        float maxDistance = hasSurface ? length(reconstructViewPosition(uv, depth)) : LightRadius;
         contribution += calculateVolumetric(uv, rayDir, maxDistance);
     }
 

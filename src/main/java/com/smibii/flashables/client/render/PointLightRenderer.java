@@ -66,9 +66,18 @@ public final class PointLightRenderer {
         Matrix4f inverseModelView = new Matrix4f(modelView).invert();
         Matrix4f inverseProjection = new Matrix4f(projection).invert();
 
-        RenderSystem.enableBlend();
-        RenderSystem.blendFunc(GL11.GL_SRC_ALPHA_SATURATE, GL11.GL_ONE_MINUS_SRC_ALPHA);
-
+        /*
+         * The shader reads the pre-light scene from SceneSampler and
+         * outputs the fully composited result, not a delta to blend -
+         * so this needs a hard overwrite, not GL blending. Blending
+         * (GL_SRC_ALPHA_SATURATE against dst alpha) used to zero out
+         * every light after the first: our shader always outputs
+         * alpha 1.0, so once one light had written a pixel, dst alpha
+         * was already 1.0 and the src/dst blend factors both
+         * collapsed to 0 - every subsequent light drawn over the same
+         * pixels came out fully black.
+         */
+        RenderSystem.disableBlend();
         RenderSystem.disableDepthTest();
         RenderSystem.depthMask(false);
         RenderSystem.disableCull();

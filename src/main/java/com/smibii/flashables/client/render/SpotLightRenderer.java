@@ -73,9 +73,13 @@ public final class SpotLightRenderer {
 
         SpotLightShadowMap shadowMap = ShadowMapPool.forSpot(light);
 
-        RenderSystem.enableBlend();
-        RenderSystem.blendFunc(GL11.GL_SRC_ALPHA_SATURATE, GL11.GL_ONE_MINUS_SRC_ALPHA);
-
+        /*
+         * See PointLightRenderer.renderLight() - the shader outputs
+         * the fully composited scene color, not a delta, so this
+         * needs a hard overwrite. GL blending here made every light
+         * after the first render fully black.
+         */
+        RenderSystem.disableBlend();
         RenderSystem.disableDepthTest();
         RenderSystem.depthMask(false);
         RenderSystem.disableCull();
@@ -96,7 +100,17 @@ public final class SpotLightRenderer {
         shader.getUniform("LightVolumetric").set(light.isRenderVolumetric() ? 1.0f : 0.0f);
 
         float outerAngle = Math.max(1.0f, light.getAngle());
-        float innerAngle = outerAngle * 0.85f;
+        /*
+         * The cone edge is smoothstep-interpolated between these two
+         * angles (see spotFalloff() in the shader), which is smooth
+         * in theory - but a band that's only a small fraction of the
+         * outer angle fades over so few degrees that it still looks
+         * like a hard cutoff. Widen it (at least 6 degrees, or 35% of
+         * the outer angle for wide cones) so it's actually visible as
+         * a soft edge rather than a step.
+         */
+        float falloffBand = Math.max(outerAngle * 0.35f, 6.0f);
+        float innerAngle = Math.max(outerAngle - falloffBand, 0.0f);
         shader.getUniform("LightAngleOuterCos").set((float) Math.cos(Math.toRadians(outerAngle)));
         shader.getUniform("LightAngleInnerCos").set((float) Math.cos(Math.toRadians(innerAngle)));
 

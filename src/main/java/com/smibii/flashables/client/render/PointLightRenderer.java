@@ -2,6 +2,7 @@ package com.smibii.flashables.client.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
+import com.smibii.flashables.client.render.shadow.PointLightShadowMap;
 import com.smibii.flashables.helper.Logger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -25,16 +26,13 @@ public class PointLightRenderer {
 
     @SubscribeEvent
     public static void render(RenderLevelStageEvent event) {
-        if (event.getStage() !=
-                RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
             return;
         }
-
         ShaderInstance shader = PointLightShader.POINT_LIGHT;
-
         SceneCopy.copy();
         DepthCopy.copy();
-
+        PointLightShadowMap.render(event.getPartialTick());
         renderLight(event.getPoseStack(), shader);
     }
 
@@ -43,33 +41,19 @@ public class PointLightRenderer {
         float progress = 0.0f;
 
         if (timeOfDay >= 12000 && timeOfDay <= 13000) {
-            // 🌇 SUNSET: From start of twilight (12000) to full dark (13000)
-            progress = (timeOfDay - 12000) / 1000.0f; // Smoothly ascends 0.0 -> 1.0
+            progress = (timeOfDay - 12000) / 1000.0f;
         }
         else if (timeOfDay > 13000 && timeOfDay < 23000) {
-            // 🌙 NIGHTTIME: Completely dark
             progress = 1.0f;
         }
         else if (timeOfDay >= 21000 && timeOfDay <= 24000) {
-            // 🌅 SUNRISE: From start of morning light (23000) to full brightness (24000)
-            progress = (24000 - timeOfDay) / 3000.0f; // Smoothly descends 1.0 -> 0.0
+            progress = (24000 - timeOfDay) / 3000.0f;
         }
         else {
-            // ☀️ DAYTIME: Completely light
             progress = 0.0f;
         }
 
-        // Linearly scales the progress directly into your 1.0 to 5.0 range
         return 1.0f + (progress * 4.0f);
-    }
-
-    private static float easeInOutCubic(float x) {
-        float sharpness = 100.0f;
-
-        float n = (x - 0.5f) * sharpness;
-        float sigmoid = n / (float) Math.sqrt(1.0f + n * n);
-
-        return (sigmoid + 1.0f) / 2.0f;
     }
 
     private static boolean isSkyExposed(Level level, BlockPos pos, int maxDistance) {
@@ -116,125 +100,41 @@ public class PointLightRenderer {
             PoseStack poseStack,
             ShaderInstance shader
     ) {
-        Minecraft minecraft =
-                Minecraft.getInstance();
+        Minecraft minecraft = Minecraft.getInstance();
+        Vec3 camera = minecraft.gameRenderer.getMainCamera().getPosition();
+        Vec3 light = LIGHT.getPosition();
 
-        Vec3 camera =
-                minecraft.gameRenderer
-                        .getMainCamera()
-                        .getPosition();
+        float lightX = (float) (light.x - camera.x);
+        float lightY = (float) (light.y - camera.y);
+        float lightZ = (float) (light.z - camera.z);
 
-        Vec3 light =
-                LIGHT.getPosition();
-
-        /*
-         * Camera-relative light position.
-         */
-        float lightX =
-                (float) (light.x - camera.x);
-
-        float lightY =
-                (float) (light.y - camera.y);
-
-        float lightZ =
-                (float) (light.z - camera.z);
-
-        /*
-         * This is the exact matrix used to transform
-         * our sphere vertices.
-         */
-        Matrix4f modelView =
-                poseStack.last().pose();
-
-        /*
-         * Convert the light position into the same
-         * view space used by the depth reconstruction.
-         */
-        Vector4f lightView =
-                new Vector4f(
-                        lightX,
-                        lightY,
-                        lightZ,
-                        1.0f
-                );
-
+        Matrix4f modelView = poseStack.last().pose();
+        Vector4f lightView = new Vector4f(lightX, lightY, lightZ, 1.0f);
         modelView.transform(lightView);
 
-        Matrix4f projection =
-                RenderSystem.getProjectionMatrix();
-
-        Matrix4f inverseProjection =
-                new Matrix4f(projection)
-                        .invert();
+        Matrix4f projection = RenderSystem.getProjectionMatrix();
+        Matrix4f inverseModelView = new Matrix4f(modelView).invert();
+        Matrix4f inverseProjection = new Matrix4f(projection).invert();
 
         RenderSystem.enableBlend();
-
         RenderSystem.blendFunc(
                 GL11.GL_SRC_ALPHA_SATURATE,
                 GL11.GL_ONE_MINUS_SRC_ALPHA
         );
 
-        /*
-         * We don't want the sphere itself to depth-test.
-         * The depth texture does the surface mapping.
-         */
         RenderSystem.disableDepthTest();
         RenderSystem.depthMask(false);
-
         RenderSystem.disableCull();
+        RenderSystem.setShader(() -> shader);
 
-        RenderSystem.setShader(
-                () -> shader
-        );
-
-        /*
-         * Vertex shader.
-         */
-        shader.getUniform(
-                "ModelViewMat"
-        ).set(modelView);
-
-        shader.getUniform(
-                "ProjMat"
-        ).set(projection);
-
-        /*
-         * Fragment reconstruction.
-         */
-        shader.getUniform(
-                "InvProjMat"
-        ).set(inverseProjection);
-
-        /*
-         * Light in VIEW SPACE.
-         */
-        shader.getUniform(
-                "LightPositionView"
-        ).set(
-                lightView.x,
-                lightView.y,
-                lightView.z
-        );
-
-        shader.getUniform(
-                "LightColor"
-        ).set(
-                LIGHT.getColor().x,
-                LIGHT.getColor().y,
-                LIGHT.getColor().z
-        );
-
-        shader.getUniform(
-                "LightIntensity"
-        ).set(
-                LIGHT.getIntensity()
-        );
-
-        shader.getUniform(
-                "LightRadius"
-        ).set(
-                LIGHT.getRadius()
-        );
+        shader.getUniform("ModelViewMat").set(modelView);
+        shader.getUniform("ProjMat").set(projection);
+        shader.getUniform("InvViewMat").set(inverseModelView);
+        shader.getUniform("InvProjMat").set(inverseProjection);
+        shader.getUniform("LightPositionView").set(lightView.x, lightView.y, lightView.z);
+        shader.getUniform("LightColor").set(LIGHT.getColor().x, LIGHT.getColor().y, LIGHT.getColor().z);
+        shader.getUniform("LightIntensity").set(LIGHT.getIntensity());
+        shader.getUniform("LightRadius").set(LIGHT.getRadius());
 
         float environmentMultiplier = getEasedTimeFactor(minecraft.level.dayTime());
         int blockLight =
@@ -253,41 +153,19 @@ public class PointLightRenderer {
                 blockLight <= 4 &&
                         skyLight <= 4;
 
-        Logger.info(blockLight + " " + skyLight + " " + dark);
-
         shader.getUniform("LightMultiplier").set(dark ? 5 : environmentMultiplier);
+        shader.getUniform("CameraPositionWorld").set((float) camera.x, (float) camera.y, (float) camera.z);
+        shader.getUniform("ScreenSize").set((float) minecraft.getWindow().getWidth(), (float) minecraft.getWindow().getHeight());
 
-        shader.getUniform(
-                "ScreenSize"
-        ).set(
-                (float) minecraft.getWindow().getWidth(),
-                (float) minecraft.getWindow().getHeight()
-        );
-
-        /*
-         * Depth texture.
-         */
         RenderSystem.activeTexture(GL13.GL_TEXTURE0);
         RenderSystem.bindTexture(DepthCopy.getTexture());
-        shader.setSampler(
-                "DepthSampler",
-                DepthCopy.getTexture()
-        );
+        shader.setSampler("DepthSampler", DepthCopy.getTexture());
 
         RenderSystem.activeTexture(GL13.GL_TEXTURE1);
         RenderSystem.bindTexture(SceneCopy.getTexture());
-        shader.setSampler(
-                "SceneSampler",
-                SceneCopy.getTexture()
-        );
+        shader.setSampler("SceneSampler", SceneCopy.getTexture());
 
-        /*
-         * Light volume.
-         */
-        renderSphere(
-                poseStack,
-                LIGHT.getRadius()
-        );
+        renderSphere(poseStack, LIGHT.getRadius());
 
         RenderSystem.depthMask(true);
         RenderSystem.enableDepthTest();
@@ -301,8 +179,7 @@ public class PointLightRenderer {
             PoseStack poseStack,
             float radius
     ) {
-        Tesselator tesselator =
-                Tesselator.getInstance();
+        Tesselator tesselator = Tesselator.getInstance();
 
         BufferBuilder buffer =
                 tesselator.getBuilder();

@@ -1,9 +1,11 @@
 {
   "vertex": "point_light_shadow",
   "fragment": "point_light_shadow",
+
   "attributes": [
     "Position"
   ],
+
   "uniforms": [
     {
       "name": "ModelViewMat",

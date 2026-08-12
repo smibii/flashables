@@ -14,6 +14,9 @@ import java.io.IOException;
 public class PointLightShader {
     public static ShaderInstance POINT_LIGHT;
     public static ShaderInstance NORMAL_COPY;
+    public static ShaderInstance POINT_LIGHT_SHADOW;
+
+    private PointLightShader() {}
 
     @SubscribeEvent
     public static void registerShaders(
@@ -29,6 +32,17 @@ public class PointLightShader {
                 ),
                 shader -> {
                     POINT_LIGHT = shader;
+                }
+        );
+
+        event.registerShader(
+                new ShaderInstance(
+                        event.getResourceProvider(),
+                        Flashables.location("point_light_shadow"),
+                        DefaultVertexFormat.POSITION
+                ),
+                shader -> {
+                    POINT_LIGHT_SHADOW = shader;
                 }
         );
     }

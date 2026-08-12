@@ -4,18 +4,28 @@ import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-@Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.FORGE)
+@Mod.EventBusSubscriber
 public class PointLightShadowRenderer {
+    private static boolean rendering = false;
+
     @SubscribeEvent
     public static void render(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
+        if (rendering) {
             return;
         }
 
-        if (PointLightShadowMap.isRendering()) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL) {
             return;
         }
 
-        PointLightShadowMap.render(event.getPartialTick());
+        rendering = true;
+
+        try {
+            PointLightShadowMap.render(
+                    event.getPartialTick()
+            );
+        } finally {
+            rendering = false;
+        }
     }
 }

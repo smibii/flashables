@@ -17,6 +17,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL32;
 
 @Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class PointLightRenderer {
@@ -131,6 +132,7 @@ public class PointLightRenderer {
         shader.getUniform("ProjMat").set(projection);
         shader.getUniform("InvViewMat").set(inverseModelView);
         shader.getUniform("InvProjMat").set(inverseProjection);
+        shader.getUniform("LightPositionWorld").set((float) light.x, (float) light.y, (float) light.z);
         shader.getUniform("LightPositionView").set(lightView.x, lightView.y, lightView.z);
         shader.getUniform("LightColor").set(LIGHT.getColor().x, LIGHT.getColor().y, LIGHT.getColor().z);
         shader.getUniform("LightIntensity").set(LIGHT.getIntensity());
@@ -164,6 +166,11 @@ public class PointLightRenderer {
         RenderSystem.activeTexture(GL13.GL_TEXTURE1);
         RenderSystem.bindTexture(SceneCopy.getTexture());
         shader.setSampler("SceneSampler", SceneCopy.getTexture());
+
+        RenderSystem.activeTexture(GL13.GL_TEXTURE2);
+        GL11.glBindTexture(GL32.GL_TEXTURE_CUBE_MAP, PointLightShadowMap.getTexture());
+        shader.setSampler("ShadowSampler", PointLightShadowMap.getTexture());
+        RenderSystem.activeTexture(GL13.GL_TEXTURE0);
 
         renderSphere(poseStack, LIGHT.getRadius());
 

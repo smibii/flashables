@@ -1,12 +1,7 @@
 package com.smibii.flashables.client.render.shadow;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexSorting;
-import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.lwjgl.BufferUtils;
@@ -27,18 +22,16 @@ import java.nio.IntBuffer;
  * level render begins, then just sampled while drawing each light's
  * volume, the same way {@link PointLightShadowMap} does for point
  * lights.
+ * <p>
+ * The depth content comes from {@link ShadowGeometryRenderer} (solid
+ * block geometry we build and draw ourselves), not from asking
+ * Minecraft to render the level - see {@link PointLightShadowMap#render}
+ * for why.
  */
 public class SpotLightShadowMap {
     public static final int SIZE = 1024;
 
     private static final float NEAR_PLANE = 0.05f;
-
-    /*
-     * Shared across every instance: only one shadow map is ever being
-     * rendered at a time (sequentially, on the render thread), so a
-     * single reusable shadow camera is enough.
-     */
-    private static final ShadowCamera SHADOW_CAMERA = new ShadowCamera();
 
     private int framebuffer = -1;
     private int depthTexture = -1;
@@ -123,8 +116,7 @@ public class SpotLightShadowMap {
             Vec3 lightPosition,
             Vec3 direction,
             float angleDegrees,
-            float radius,
-            float partialTick
+            float radius
     ) {
         if (!RenderSystem.isOnRenderThread()) {
             return;
@@ -147,7 +139,6 @@ public class SpotLightShadowMap {
         rendering = true;
 
         try {
-            Matrix4f oldProjection = new Matrix4f(RenderSystem.getProjectionMatrix());
             int oldFramebuffer = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
 
             IntBuffer viewport = BufferUtils.createIntBuffer(4);
@@ -173,9 +164,6 @@ public class SpotLightShadowMap {
             GL11.glColorMask(false, false, false, false);
             GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
 
-            GameRenderer gameRenderer = minecraft.gameRenderer;
-            LightTexture lightTexture = gameRenderer.lightTexture();
-
             Vec3 forward = direction.normalize();
             float pitch = (float) Math.toDegrees(Math.asin(-forward.y));
             float yaw = (float) Math.toDegrees(Math.atan2(-forward.x, forward.z));
@@ -186,38 +174,17 @@ public class SpotLightShadowMap {
             Matrix4f projection = new Matrix4f()
                     .perspective((float) Math.toRadians(fov), 1.0f, NEAR_PLANE, far);
 
-            RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
-
-            SHADOW_CAMERA.setup(minecraft.level, minecraft.player, false, false, partialTick);
-            SHADOW_CAMERA.setPosition(lightPosition.x, lightPosition.y, lightPosition.z);
-            SHADOW_CAMERA.setRotation(yaw, pitch);
-
-            minecraft.getEntityRenderDispatcher().prepare(minecraft.level, SHADOW_CAMERA, minecraft.player);
-
-            PoseStack poseStack = new PoseStack();
-
-            minecraft.levelRenderer.renderLevel(
-                    poseStack,
-                    partialTick,
-                    minecraft.level.getGameTime(),
-                    false,
-                    SHADOW_CAMERA,
-                    gameRenderer,
-                    lightTexture,
-                    projection
-            );
-
             Matrix4f view = new Matrix4f()
                     .rotateX((float) Math.toRadians(pitch))
                     .rotateY((float) Math.toRadians(yaw + 180.0f));
+
+            ShadowGeometryRenderer.render(minecraft.level, lightPosition, radius, view, projection);
 
             lastShadowMat.set(projection).mul(view);
 
             GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, oldFramebuffer);
             GL11.glViewport(oldViewportX, oldViewportY, oldViewportWidth, oldViewportHeight);
             GL11.glColorMask(true, true, true, true);
-
-            RenderSystem.setProjectionMatrix(oldProjection, VertexSorting.DISTANCE_TO_ORIGIN);
 
             if (depthTest) {
                 RenderSystem.enableDepthTest();
@@ -245,11 +212,11 @@ public class SpotLightShadowMap {
 
     /**
      * Recomputes {@link #getShadowMat()} from the light's transform
-     * alone, without touching the depth texture or the GPU. Used
-     * while the actual depth pass ({@link #render}) is disabled (see
-     * {@link ShadowPassRenderer}), so a spot light's projected
-     * "cookie" texture - which only needs this matrix, not real
-     * shadow occlusion - keeps working.
+     * alone, without touching the depth texture or the GPU. Used by
+     * {@link ShadowPassRenderer} for lights that have a projected
+     * "cookie" texture but shadows turned off - the cookie only needs
+     * this matrix, not real shadow occlusion, so there's no reason to
+     * pay for a full {@link #render} on those.
      */
     public void updateShadowMatOnly(Vec3 direction, float angleDegrees, float radius) {
         Vec3 forward = direction.normalize();
@@ -294,15 +261,5 @@ public class SpotLightShadowMap {
         }
 
         initialized = false;
-    }
-
-    private static class ShadowCamera extends Camera {
-        public void setPosition(double x, double y, double z) {
-            super.setPosition(x, y, z);
-        }
-
-        public void setRotation(float yaw, float pitch) {
-            super.setRotation(yaw, pitch);
-        }
     }
 }

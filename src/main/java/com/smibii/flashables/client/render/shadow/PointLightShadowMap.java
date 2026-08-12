@@ -1,12 +1,7 @@
 package com.smibii.flashables.client.render.shadow;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexSorting;
-import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.lwjgl.BufferUtils;
@@ -27,18 +22,15 @@ import java.nio.IntBuffer;
  * Unlike the spot light map, no shadow-space matrix is exposed: the
  * point light fragment shader samples this cubemap directly by
  * direction from the light instead of a projected UV.
+ * <p>
+ * Each face's depth content comes from {@link ShadowGeometryRenderer}
+ * (solid block geometry we build and draw ourselves), not from asking
+ * Minecraft to render the level - see {@link #render} for why.
  */
 public class PointLightShadowMap {
     public static final int SIZE = 1024;
 
     private static final float NEAR_PLANE = 0.05f;
-
-    /*
-     * Shared across every instance: only one shadow map is ever being
-     * rendered at a time (sequentially, on the render thread), so a
-     * single reusable shadow camera is enough.
-     */
-    private static final ShadowCamera SHADOW_CAMERA = new ShadowCamera();
 
     private int framebuffer = -1;
     private int depthCubemap = -1;
@@ -190,12 +182,9 @@ public class PointLightShadowMap {
     /**
      * Renders the six-face depth cubemap for this point light. Must
      * only be called from {@link ShadowPassRenderer}, before the
-     * frame's normal level render starts - calling this from inside
-     * a {@code RenderLevelStageEvent} would recursively re-enter
-     * {@code LevelRenderer.renderLevel()} mid-frame, which corrupts
-     * Oculus/Iris's per-frame terrain layer state and crashes.
+     * frame's normal level render starts.
      */
-    public void render(Vec3 light, float radius, float partialTick) {
+    public void render(Vec3 light, float radius) {
         if (!RenderSystem.isOnRenderThread()) {
             return;
         }
@@ -222,11 +211,6 @@ public class PointLightShadowMap {
              * Save OpenGL state
              * ------------------------------------------------
              */
-
-            Matrix4f oldProjection =
-                    new Matrix4f(
-                            RenderSystem.getProjectionMatrix()
-                    );
 
             int oldFramebuffer =
                     GL11.glGetInteger(
@@ -308,12 +292,6 @@ public class PointLightShadowMap {
                     false
             );
 
-            GameRenderer gameRenderer =
-                    minecraft.gameRenderer;
-
-            LightTexture lightTexture =
-                    gameRenderer.lightTexture();
-
             /*
              * ------------------------------------------------
              * 90 degree projection
@@ -332,97 +310,27 @@ public class PointLightShadowMap {
                                     radius
                             );
 
-            RenderSystem.setProjectionMatrix(
-                    projection,
-                    VertexSorting.DISTANCE_TO_ORIGIN
-            );
-
             /*
              * ------------------------------------------------
              * Render all six cubemap faces
              * ------------------------------------------------
              *
-             * OpenGL cubemap directions:
-             *
-             * +X
-             * -X
-             * +Y
-             * -Y
-             * +Z
-             * -Z
+             * Face index N = GL_TEXTURE_CUBE_MAP_POSITIVE_X + N, in
+             * OpenGL's fixed order: +X, -X, +Y, -Y, +Z, -Z. The
+             * yaw/pitch below must make Minecraft's view-vector
+             * formula (direction.x = -sin(yaw)*cos(pitch),
+             * direction.y = -sin(pitch), direction.z = cos(yaw)*cos(pitch))
+             * point each face in that same direction, or content ends
+             * up stored in the wrong face and every shadow/cookie
+             * lookup along that axis samples the wrong data.
              */
 
-            renderFace(
-                    minecraft,
-                    light,
-                    lightTexture,
-                    gameRenderer,
-                    projection,
-                    partialTick,
-                    0,
-                    90.0f,
-                    0.0f
-            );
-
-            renderFace(
-                    minecraft,
-                    light,
-                    lightTexture,
-                    gameRenderer,
-                    projection,
-                    partialTick,
-                    1,
-                    -90.0f,
-                    0.0f
-            );
-
-            renderFace(
-                    minecraft,
-                    light,
-                    lightTexture,
-                    gameRenderer,
-                    projection,
-                    partialTick,
-                    2,
-                    0.0f,
-                    -90.0f
-            );
-
-            renderFace(
-                    minecraft,
-                    light,
-                    lightTexture,
-                    gameRenderer,
-                    projection,
-                    partialTick,
-                    3,
-                    0.0f,
-                    90.0f
-            );
-
-            renderFace(
-                    minecraft,
-                    light,
-                    lightTexture,
-                    gameRenderer,
-                    projection,
-                    partialTick,
-                    4,
-                    0.0f,
-                    0.0f
-            );
-
-            renderFace(
-                    minecraft,
-                    light,
-                    lightTexture,
-                    gameRenderer,
-                    projection,
-                    partialTick,
-                    5,
-                    180.0f,
-                    0.0f
-            );
+            renderFace(minecraft, light, projection, radius, 0, -90.0f, 0.0f); // +X
+            renderFace(minecraft, light, projection, radius, 1, 90.0f, 0.0f);  // -X
+            renderFace(minecraft, light, projection, radius, 2, 0.0f, -90.0f); // +Y
+            renderFace(minecraft, light, projection, radius, 3, 0.0f, 90.0f);  // -Y
+            renderFace(minecraft, light, projection, radius, 4, 0.0f, 0.0f);   // +Z
+            renderFace(minecraft, light, projection, radius, 5, 180.0f, 0.0f); // -Z
 
             /*
              * ------------------------------------------------
@@ -447,11 +355,6 @@ public class PointLightShadowMap {
                     true,
                     true,
                     true
-            );
-
-            RenderSystem.setProjectionMatrix(
-                    oldProjection,
-                    VertexSorting.DISTANCE_TO_ORIGIN
             );
 
             /*
@@ -485,10 +388,8 @@ public class PointLightShadowMap {
     private void renderFace(
             Minecraft minecraft,
             Vec3 light,
-            LightTexture lightTexture,
-            GameRenderer gameRenderer,
             Matrix4f projection,
-            float partialTick,
+            float radius,
             int face,
             float yaw,
             float pitch
@@ -519,57 +420,18 @@ public class PointLightShadowMap {
         );
 
         /*
-         * Configure our custom camera.
+         * Same yaw/pitch-to-rotation convention as
+         * SpotLightShadowMap uses for its shadow matrix - matches
+         * the direction each cubemap face is expected to look, which
+         * is what the fragment shader's cubemap sampling relies on.
          */
 
-        SHADOW_CAMERA.setup(
-                minecraft.level,
-                minecraft.player,
-                false,
-                false,
-                partialTick
-        );
+        Matrix4f view =
+                new Matrix4f()
+                        .rotateX((float) Math.toRadians(pitch))
+                        .rotateY((float) Math.toRadians(yaw + 180.0f));
 
-        SHADOW_CAMERA.setPosition(
-                light.x,
-                light.y,
-                light.z
-        );
-
-        SHADOW_CAMERA.setRotation(
-                yaw,
-                pitch
-        );
-
-        /*
-         * Tell Minecraft's entity renderer which
-         * camera is currently rendering.
-         */
-
-        minecraft.getEntityRenderDispatcher()
-                .prepare(
-                        minecraft.level,
-                        SHADOW_CAMERA,
-                        minecraft.player
-                );
-
-        /*
-         * Render the level from the light.
-         */
-
-        PoseStack poseStack =
-                new PoseStack();
-
-        minecraft.levelRenderer.renderLevel(
-                poseStack,
-                partialTick,
-                minecraft.level.getGameTime(),
-                false,
-                SHADOW_CAMERA,
-                gameRenderer,
-                lightTexture,
-                projection
-        );
+        ShadowGeometryRenderer.render(minecraft.level, light, radius, view, projection);
     }
 
     public int getTexture() {
@@ -601,25 +463,5 @@ public class PointLightShadowMap {
         }
 
         initialized = false;
-    }
-
-    /*
-     * Custom camera used exclusively for shadow rendering.
-     */
-    private static class ShadowCamera extends Camera {
-        public void setPosition(
-                double x,
-                double y,
-                double z
-        ) {
-            super.setPosition(x, y, z);
-        }
-
-        public void setRotation(
-                float yaw,
-                float pitch
-        ) {
-            super.setRotation(yaw, pitch);
-        }
     }
 }

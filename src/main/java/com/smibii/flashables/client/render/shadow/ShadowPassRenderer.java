@@ -14,26 +14,22 @@ import net.minecraftforge.fml.common.Mod;
  * <p>
  * This has to happen outside {@code RenderLevelStageEvent}: that
  * event fires from inside an already-in-progress
- * {@code LevelRenderer.renderLevel()} call, and each shadow map is
- * itself rendered by calling {@code renderLevel()} again with a
- * shadow camera. Doing that from inside {@code RenderLevelStageEvent}
- * re-enters {@code renderLevel()} while the outer call is still on
- * the stack, which corrupts Oculus/Iris's per-frame terrain layer
- * state (its {@code endTerrainLayer} bookkeeping isn't reentrant) and
- * crashes the game. {@code RenderTickEvent.Phase.START} fires before
- * {@code GameRenderer.render()}/{@code renderLevel()} are called at
- * all for the frame, so rendering shadow maps here is a separate,
- * non-nested top-level call instead.
- * <p>
- * That still leaves one nesting problem: each shadow map's own
- * {@code renderLevel()} call (one per cubemap face, for point lights)
- * is itself a real level render, so it fires
- * {@code RenderLevelStageEvent} too - which would re-trigger
- * {@link com.smibii.flashables.client.render.LightingRenderer} and draw every light's sphere again, mid
- * shadow-pass, into whatever framebuffer/viewport/projection the
- * shadow map currently has bound. {@link #isActive()} lets
- * {@code LightingRenderer} detect that and skip its own pass while
- * this one is running.
+ * {@code LevelRenderer.renderLevel()} call. {@link PointLightShadowMap}
+ * and {@link SpotLightShadowMap} used to render their depth by calling
+ * {@code renderLevel()} again with a shadow camera, which - called
+ * from inside {@code RenderLevelStageEvent} - re-entered
+ * {@code renderLevel()} while the outer call was still on the stack,
+ * corrupting Oculus/Iris's per-frame state and crashing or hanging the
+ * game in a different subsystem every time (terrain layers, then
+ * weather rendering). They now build and draw shadow geometry
+ * themselves (see {@link ShadowGeometryRenderer}) instead of calling
+ * back into {@code LevelRenderer} at all, which avoids that whole
+ * class of problem rather than working around one symptom of it.
+ * {@code RenderTickEvent.Phase.START} still fires before
+ * {@code GameRenderer.render()} for the frame, so this remains a
+ * separate, non-nested top-level call - no longer strictly required
+ * for correctness now that nothing here re-enters the level renderer,
+ * but there's no reason to move it.
  */
 @Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ShadowPassRenderer {
@@ -43,8 +39,9 @@ public final class ShadowPassRenderer {
 
     /**
      * True while this class is in the middle of rendering shadow maps
-     * for the frame - including while a shadow map's own nested
-     * {@code renderLevel()} call is re-entering the render pipeline.
+     * for the frame. Kept as a defensive guard for
+     * {@code LightingRenderer} even though nothing here re-enters
+     * {@code RenderLevelStageEvent} anymore.
      */
     public static boolean isActive() {
         return active;
@@ -62,8 +59,6 @@ public final class ShadowPassRenderer {
             return;
         }
 
-        float partialTick = event.renderTickTime;
-
         active = true;
 
         try {
@@ -72,21 +67,31 @@ public final class ShadowPassRenderer {
                     continue;
                 }
 
-                ShadowMapPool.forPoint(light).render(light.getPosition(), light.getRadius(), partialTick);
+                ShadowMapPool.forPoint(light).render(light.getPosition(), light.getRadius());
             }
 
             for (SpotLight light : LightRegistry.getSpotLights()) {
-                if (!light.isRenderShadows() && light.getTexture() == null) {
+                boolean wantsShadow = light.isRenderShadows();
+                boolean wantsCookie = light.getTexture() != null;
+
+                if (!wantsShadow && !wantsCookie) {
                     continue;
                 }
 
-                ShadowMapPool.forSpot(light).render(
-                        light.getPosition(),
-                        light.getDirection(),
-                        light.getAngle(),
-                        light.getRadius(),
-                        partialTick
-                );
+                SpotLightShadowMap map = ShadowMapPool.forSpot(light);
+
+                if (wantsShadow) {
+                    map.render(light.getPosition(), light.getDirection(), light.getAngle(), light.getRadius());
+                } else {
+                    /*
+                     * Shadows off, but the light still has a
+                     * projected texture - that only needs an
+                     * up-to-date matrix, not a rendered depth
+                     * texture, so skip the (now real, not free) GPU
+                     * work of render().
+                     */
+                    map.updateShadowMatOnly(light.getDirection(), light.getAngle(), light.getRadius());
+                }
             }
         } finally {
             active = false;

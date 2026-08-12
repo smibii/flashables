@@ -329,7 +329,16 @@ vec3 calculateVolumetric(
         }
     }
 
-    return accum;
+    /*
+         * Unclamped, this scales with LightIntensity/LightMultiplier
+         * (multiplier alone goes up to 5x - see LightEnvironment) and
+         * stepSize (grows with LightRadius), so it can add up to well
+         * past "fully bright" before it ever reaches the screen-blend in
+         * main(). Screen blend only stays within [0,1] if both inputs
+         * already are, so an unbounded value here overshoots even harder
+         * than plain addition would - cap it here instead.
+         */
+    return min(accum, vec3(1.0));
 }
 
 void main()
@@ -388,7 +397,16 @@ void main()
     if (LightVolumetric >= 0.5)
     {
         float maxDistance = hasSurface ? length(reconstructViewPosition(uv, depth)) : LightRadius;
-        contribution += calculateVolumetric(uv, rayDir, maxDistance);
+        vec3 volumetric = calculateVolumetric(uv, rayDir, maxDistance);
+        /*
+         * Same reason as the surface lighting above: plain addition
+         * here let the fog stack unbounded on top of an already
+         * bright pixel (e.g. looking through this light's volumetric
+         * cone at ground already lit directly by a different light),
+         * blowing straight past white. Screen-blend it in instead so
+         * it tapers the same way.
+         */
+        contribution = vec3(1.0) - (vec3(1.0) - contribution) * (vec3(1.0) - volumetric);
     }
 
     contribution = min(contribution, vec3(1.0));

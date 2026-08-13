@@ -21,6 +21,7 @@ uniform float LightHasShadows;
 uniform float LightVolumetric;
 uniform float LightVolumetricStrength;
 uniform float LightVolumetricStep;
+uniform float LightVolumetricRenderDistance;
 
 uniform vec3 CameraPositionWorld;
 
@@ -283,7 +284,7 @@ void main()
 
     if (LightVolumetric >= 0.5)
     {
-        float maxDistance = hasSurface ? length(reconstructViewPosition(uv, depth)) : LightRadius;
+        float maxDistance = hasSurface ? length(reconstructViewPosition(uv, depth)) : LightVolumetricRenderDistance;
         vec3 volumetric = calculateVolumetric(uv, rayDir, maxDistance);
         /*
          * Same reason as the surface lighting above: plain addition

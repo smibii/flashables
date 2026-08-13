@@ -181,6 +181,13 @@
     },
 
     {
+      "name": "LightVolumetricRenderDistance",
+      "type": "float",
+      "count": 1,
+      "values": [200.0]
+    },
+
+    {
       "name": "HasProjectedTexture",
       "type": "float",
       "count": 1,

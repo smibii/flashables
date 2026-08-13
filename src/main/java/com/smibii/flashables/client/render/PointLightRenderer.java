@@ -95,6 +95,7 @@ public final class PointLightRenderer {
         setUniform(shader, "LightVolumetric", light.isRenderVolumetric() ? 1.0f : 0.0f);
         setUniform(shader, "LightVolumetricStrength", light.getVolumetricStrength());
         setUniform(shader, "LightVolumetricStep", light.getVolumetricStep());
+        setUniform(shader, "LightVolumetricRenderDistance", 200.0f);
 
         float multiplier = LightEnvironment.getMultiplier(minecraft.level, position, light.getRadius());
         setUniform(shader, "LightMultiplier", multiplier);

@@ -145,6 +145,13 @@
     },
 
     {
+      "name": "LightVolumetricRenderDistance",
+      "type": "float",
+      "count": 1,
+      "values": [200.0]
+    },
+
+    {
       "name": "ScreenSize",
       "type": "float",
       "count": 2,

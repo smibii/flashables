@@ -1,5 +1,6 @@
 package com.smibii.flashables.client.render;
 
+import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.smibii.flashables.client.light.LightRegistry;
@@ -66,6 +67,7 @@ public final class SpotLightRenderer {
         Matrix4f projection = RenderSystem.getProjectionMatrix();
         Matrix4f inverseModelView = new Matrix4f(modelView).invert();
         Matrix4f inverseProjection = new Matrix4f(projection).invert();
+        Matrix4f lightProjectionMat = computeLightProjectionMat(direction, light.getAngle(), light.getRadius());
 
         /*
          * See PointLightRenderer.renderLight() - the shader outputs
@@ -79,20 +81,21 @@ public final class SpotLightRenderer {
         RenderSystem.disableCull();
         RenderSystem.setShader(() -> shader);
 
-        shader.getUniform("ModelViewMat").set(modelView);
-        shader.getUniform("ProjMat").set(projection);
-        shader.getUniform("InvViewMat").set(inverseModelView);
-        shader.getUniform("InvProjMat").set(inverseProjection);
-        shader.getUniform("LightPositionView").set(lightView.x, lightView.y, lightView.z);
-        shader.getUniform("LightPositionWorld").set((float) position.x, (float) position.y, (float) position.z);
-        shader.getUniform("LightDirectionView").set(directionView.x, directionView.y, directionView.z);
-        shader.getUniform("LightColor").set(light.getColor().x, light.getColor().y, light.getColor().z);
-        shader.getUniform("LightIntensity").set(light.getIntensity());
-        shader.getUniform("LightRadius").set(light.getRadius());
-        shader.getUniform("LightHasShadows").set(light.isRenderShadows() ? 1.0f : 0.0f);
-        shader.getUniform("LightVolumetric").set(light.isRenderVolumetric() ? 1.0f : 0.0f);
-        shader.getUniform("LightVolumetricStrength").set(light.getVolumetricStrength());
-        shader.getUniform("LightVolumetricStep").set(light.getVolumetricStep());
+        setUniform(shader, "ModelViewMat", modelView);
+        setUniform(shader, "ProjMat", projection);
+        setUniform(shader, "InvViewMat", inverseModelView);
+        setUniform(shader, "InvProjMat", inverseProjection);
+        setUniform(shader, "LightProjectionMat", lightProjectionMat);
+        setUniform(shader, "LightPositionView", lightView.x, lightView.y, lightView.z);
+        setUniform(shader, "LightPositionWorld", (float) position.x, (float) position.y, (float) position.z);
+        setUniform(shader, "LightDirectionView", directionView.x, directionView.y, directionView.z);
+        setUniform(shader, "LightColor", light.getColor().x, light.getColor().y, light.getColor().z);
+        setUniform(shader, "LightIntensity", light.getIntensity());
+        setUniform(shader, "LightRadius", light.getRadius());
+        setUniform(shader, "LightHasShadows", light.isRenderShadows() ? 1.0f : 0.0f);
+        setUniform(shader, "LightVolumetric", light.isRenderVolumetric() ? 1.0f : 0.0f);
+        setUniform(shader, "LightVolumetricStrength", light.getVolumetricStrength());
+        setUniform(shader, "LightVolumetricStep", light.getVolumetricStep());
 
         float outerAngle = Math.max(1.0f, light.getAngle());
         /*
@@ -106,13 +109,13 @@ public final class SpotLightRenderer {
          */
         float falloffBand = Math.max(outerAngle * 0.35f, 6.0f);
         float innerAngle = Math.max(outerAngle - falloffBand, 0.0f);
-        shader.getUniform("LightAngleOuterCos").set((float) Math.cos(Math.toRadians(outerAngle)));
-        shader.getUniform("LightAngleInnerCos").set((float) Math.cos(Math.toRadians(innerAngle)));
+        setUniform(shader, "LightAngleOuterCos", (float) Math.cos(Math.toRadians(outerAngle)));
+        setUniform(shader, "LightAngleInnerCos", (float) Math.cos(Math.toRadians(innerAngle)));
 
         float multiplier = LightEnvironment.getMultiplier(minecraft.level, position, light.getRadius());
-        shader.getUniform("LightMultiplier").set(multiplier);
-        shader.getUniform("CameraPositionWorld").set((float) camera.x, (float) camera.y, (float) camera.z);
-        shader.getUniform("ScreenSize").set((float) minecraft.getWindow().getWidth(), (float) minecraft.getWindow().getHeight());
+        setUniform(shader, "LightMultiplier", multiplier);
+        setUniform(shader, "CameraPositionWorld", (float) camera.x, (float) camera.y, (float) camera.z);
+        setUniform(shader, "ScreenSize", (float) minecraft.getWindow().getWidth(), (float) minecraft.getWindow().getHeight());
 
         RenderSystem.activeTexture(GL13.GL_TEXTURE0);
         RenderSystem.bindTexture(DepthCopy.getTexture());
@@ -130,9 +133,9 @@ public final class SpotLightRenderer {
             RenderSystem.activeTexture(GL13.GL_TEXTURE3);
             RenderSystem.bindTexture(cookieTexture);
             shader.setSampler("ProjectedTexture", cookieTexture);
-            shader.getUniform("HasProjectedTexture").set(1.0f);
+            setUniform(shader, "HasProjectedTexture", 1.0f);
         } else {
-            shader.getUniform("HasProjectedTexture").set(0.0f);
+            setUniform(shader, "HasProjectedTexture", 0.0f);
         }
 
         LightVolumeMesh.renderSphere(poseStack, light.getRadius());
@@ -143,5 +146,55 @@ public final class SpotLightRenderer {
 
         RenderSystem.disableBlend();
         RenderSystem.defaultBlendFunc();
+    }
+
+    private static Matrix4f computeLightProjectionMat(Vec3 direction, float angleDegrees, float radius) {
+        float pitch = (float) Math.toDegrees(Math.asin(-direction.y));
+        float yaw = (float) Math.toDegrees(Math.atan2(-direction.x, direction.z));
+
+        float fov = Math.min(angleDegrees * 2.0f + 4.0f, 170.0f);
+        float nearPlane = 0.05f;
+        float far = Math.max(radius, nearPlane + 0.1f);
+
+        Matrix4f projection = new Matrix4f()
+                .perspective((float) Math.toRadians(fov), 1.0f, nearPlane, far);
+
+        Matrix4f view = new Matrix4f()
+                .rotateX((float) Math.toRadians(pitch))
+                .rotateY((float) Math.toRadians(yaw + 180.0f));
+
+        return projection.mul(view);
+    }
+
+    private static void setUniform(ShaderInstance shader, String name, Matrix4f value) {
+        Uniform uniform = shader.getUniform(name);
+
+        if (uniform != null) {
+            uniform.set(value);
+        }
+    }
+
+    private static void setUniform(ShaderInstance shader, String name, float x) {
+        Uniform uniform = shader.getUniform(name);
+
+        if (uniform != null) {
+            uniform.set(x);
+        }
+    }
+
+    private static void setUniform(ShaderInstance shader, String name, float x, float y) {
+        Uniform uniform = shader.getUniform(name);
+
+        if (uniform != null) {
+            uniform.set(x, y);
+        }
+    }
+
+    private static void setUniform(ShaderInstance shader, String name, float x, float y, float z) {
+        Uniform uniform = shader.getUniform(name);
+
+        if (uniform != null) {
+            uniform.set(x, y, z);
+        }
     }
 }

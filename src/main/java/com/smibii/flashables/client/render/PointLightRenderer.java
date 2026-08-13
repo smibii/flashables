@@ -1,9 +1,9 @@
 package com.smibii.flashables.client.render;
 
+import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.smibii.flashables.client.light.LightRegistry;
-import com.smibii.flashables.helper.Logger;
 import com.smibii.flashables.light.PointLight;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -82,24 +82,24 @@ public final class PointLightRenderer {
         RenderSystem.disableCull();
         RenderSystem.setShader(() -> shader);
 
-        shader.getUniform("ModelViewMat").set(modelView);
-        shader.getUniform("ProjMat").set(projection);
-        shader.getUniform("InvViewMat").set(inverseModelView);
-        shader.getUniform("InvProjMat").set(inverseProjection);
-        shader.getUniform("LightPositionView").set(lightView.x, lightView.y, lightView.z);
-        shader.getUniform("LightPositionWorld").set((float) position.x, (float) position.y, (float) position.z);
-        shader.getUniform("LightColor").set(light.getColor().x, light.getColor().y, light.getColor().z);
-        shader.getUniform("LightIntensity").set(light.getIntensity());
-        shader.getUniform("LightRadius").set(light.getRadius());
-        shader.getUniform("LightHasShadows").set(light.isRenderShadows() ? 1.0f : 0.0f);
-        shader.getUniform("LightVolumetric").set(light.isRenderVolumetric() ? 1.0f : 0.0f);
-        shader.getUniform("LightVolumetricStrength").set(light.getVolumetricStrength());
-        shader.getUniform("LightVolumetricStep").set(light.getVolumetricStep());
+        setUniform(shader, "ModelViewMat", modelView);
+        setUniform(shader, "ProjMat", projection);
+        setUniform(shader, "InvViewMat", inverseModelView);
+        setUniform(shader, "InvProjMat", inverseProjection);
+        setUniform(shader, "LightPositionView", lightView.x, lightView.y, lightView.z);
+        setUniform(shader, "LightPositionWorld", (float) position.x, (float) position.y, (float) position.z);
+        setUniform(shader, "LightColor", light.getColor().x, light.getColor().y, light.getColor().z);
+        setUniform(shader, "LightIntensity", light.getIntensity());
+        setUniform(shader, "LightRadius", light.getRadius());
+        setUniform(shader, "LightHasShadows", light.isRenderShadows() ? 1.0f : 0.0f);
+        setUniform(shader, "LightVolumetric", light.isRenderVolumetric() ? 1.0f : 0.0f);
+        setUniform(shader, "LightVolumetricStrength", light.getVolumetricStrength());
+        setUniform(shader, "LightVolumetricStep", light.getVolumetricStep());
 
         float multiplier = LightEnvironment.getMultiplier(minecraft.level, position, light.getRadius());
-        shader.getUniform("LightMultiplier").set(multiplier);
-        shader.getUniform("CameraPositionWorld").set((float) camera.x, (float) camera.y, (float) camera.z);
-        shader.getUniform("ScreenSize").set((float) minecraft.getWindow().getWidth(), (float) minecraft.getWindow().getHeight());
+        setUniform(shader, "LightMultiplier", multiplier);
+        setUniform(shader, "CameraPositionWorld", (float) camera.x, (float) camera.y, (float) camera.z);
+        setUniform(shader, "ScreenSize", (float) minecraft.getWindow().getWidth(), (float) minecraft.getWindow().getHeight());
 
         RenderSystem.activeTexture(GL13.GL_TEXTURE0);
         RenderSystem.bindTexture(DepthCopy.getTexture());
@@ -117,5 +117,37 @@ public final class PointLightRenderer {
 
         RenderSystem.disableBlend();
         RenderSystem.defaultBlendFunc();
+    }
+
+    private static void setUniform(ShaderInstance shader, String name, Matrix4f value) {
+        Uniform uniform = shader.getUniform(name);
+
+        if (uniform != null) {
+            uniform.set(value);
+        }
+    }
+
+    private static void setUniform(ShaderInstance shader, String name, float x) {
+        Uniform uniform = shader.getUniform(name);
+
+        if (uniform != null) {
+            uniform.set(x);
+        }
+    }
+
+    private static void setUniform(ShaderInstance shader, String name, float x, float y) {
+        Uniform uniform = shader.getUniform(name);
+
+        if (uniform != null) {
+            uniform.set(x, y);
+        }
+    }
+
+    private static void setUniform(ShaderInstance shader, String name, float x, float y, float z) {
+        Uniform uniform = shader.getUniform(name);
+
+        if (uniform != null) {
+            uniform.set(x, y, z);
+        }
     }
 }

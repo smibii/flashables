@@ -10,6 +10,7 @@ uniform mat4 ModelViewMat;
 uniform mat4 InvProjMat;
 uniform mat4 ProjMat;
 uniform mat4 InvViewMat;
+uniform mat4 LightProjectionMat;
 
 uniform vec3 LightPositionView;
 uniform vec3 LightPositionWorld;
@@ -60,7 +61,7 @@ vec3 reconstructNormal(vec2 uv, vec3 position)
 vec3 projectToLightSpace(vec3 worldPosition)
 {
     vec3 relative = worldPosition - LightPositionWorld;
-    vec4 clip = vec4(relative, 1.0);
+    vec4 clip = LightProjectionMat * vec4(relative, 1.0);
 
     if (clip.w <= 0.0)
     {
@@ -199,11 +200,11 @@ float fbm(vec3 p)
 
 float fogDensity(vec3 worldPosition)
 {
-    float large = fbm(worldPosition * 0.025);
-    float detail = fbm(worldPosition * 0.075 +vec3(31.7, 17.2, 9.4));
+    float large = fbm(worldPosition * 0.6);
+    float detail = fbm(worldPosition * 0.3 +vec3(31.7, 17.2, 9.4));
     float density = large * 0.75 + detail * 0.25;
     density = smoothstep(0.42, 0.68, density);
-    return density;
+    return clamp(density, 0.4, 1.0);
 }
 
 vec3 calculateVolumetric(
@@ -271,7 +272,7 @@ vec3 calculateVolumetric(
         float extinction = density * stepSize * 0.12;
         float sampleTransmittance = exp(-extinction);
 
-        accum += transmittance * sampleLight * stepSize * LightVolumetricStep * LightIntensity * LightMultiplier;
+        accum += transmittance * sampleLight * stepSize * LightVolumetricStrength * LightIntensity * LightMultiplier;
         transmittance *= sampleTransmittance;
 
         if (transmittance < 0.01)

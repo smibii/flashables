@@ -149,10 +149,10 @@ float fbm(vec3 p)
 float fogDensity(vec3 worldPosition)
 {
     float large = fbm(worldPosition * 0.6);
-    float detail = fbm(worldPosition * 0.01 + vec3(31.7, 17.2, 9.4));
-    float density = (large * 0.75 + detail * 0.25);
+    float detail = fbm(worldPosition * 0.3 +vec3(31.7, 17.2, 9.4));
+    float density = large * 0.75 + detail * 0.25;
     density = smoothstep(0.42, 0.68, density);
-    return max(density, 0.3);
+    return clamp(density, 0.4, 1.0);
 }
 
 vec3 calculateVolumetric(

@@ -60,7 +60,7 @@ vec3 reconstructNormal(vec2 uv, vec3 position)
 vec3 projectToLightSpace(vec3 worldPosition)
 {
     vec3 relative = worldPosition - LightPositionWorld;
-    vec4 clip = LightShadowMat * vec4(relative, 1.0);
+    vec4 clip = vec4(relative, 1.0);
 
     if (clip.w <= 0.0)
     {
@@ -82,20 +82,7 @@ float calculateShadow(vec3 worldPosition)
         return 1.0;
     }
 
-    vec3 projected = projectToLightSpace(worldPosition);
-
-    if (projected.z < 0.0)
-    {
-        return 1.0;
-    }
-
-    float currentDepth = projected.z - 1.0;
-    float storedDepth = texture(ShadowSampler, projected.xy).r;
-
-    if (currentDepth - ShadowBias > storedDepth)
-    {
-        return 0.0;
-    }
+    // tbd
 
     return 1.0;
 }
@@ -107,43 +94,9 @@ float calculateSoftShadow(vec3 worldPosition)
         return 1.0;
     }
 
-    vec2 texel = 1.0 / vec2(textureSize(ShadowSampler, 0));
-    float visible = 0.0;
+    // tbh
 
-    const int SAMPLES = 9;
-    vec2 offsets[SAMPLES];
-
-    offsets[0] = vec2(0.0, 0.0);
-    offsets[1] = vec2(1.0, 0.0);
-    offsets[2] = vec2(-1.0, 0.0);
-    offsets[3] = vec2(0.0, 1.0);
-    offsets[4] = vec2(0.0, -1.0);
-    offsets[5] = vec2(1.0, 1.0);
-    offsets[6] = vec2(-1.0, 1.0);
-    offsets[7] = vec2(1.0, -1.0);
-    offsets[8] = vec2(-1.0, -1.0);
-
-    vec3 projected = projectToLightSpace(worldPosition);
-
-    if (projected.z < 0.0)
-    {
-        return 1.0;
-    }
-
-    float currentDepth = projected.z - 1.0;
-
-    for (int i = 0; i < SAMPLES; i++)
-    {
-        vec2 sampleUv = projected.xy + offsets[i] * texel * 1.5;
-        float storedDepth = texture(ShadowSampler, sampleUv).r;
-
-        if (currentDepth - ShadowBias <= storedDepth)
-        {
-            visible += 1.0;
-        }
-    }
-
-    return visible / float(SAMPLES);
+    return 1.0;
 }
 
 float spotFalloff(vec3 toSurfaceView)

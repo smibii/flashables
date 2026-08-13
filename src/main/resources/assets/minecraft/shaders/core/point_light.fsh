@@ -47,22 +47,6 @@ vec3 reconstructNormal(vec2 uv, vec3 position)
     return normalize(cross(tangentX, tangentY));
 }
 
-float linearizeShadowDepth(float depth)
-{
-    float nearPlane = 0.05;
-    float farPlane = LightRadius;
-    float z = depth * 2.0 - 1.0;
-    return (2.0 * nearPlane * farPlane) / (farPlane + nearPlane - z * (farPlane - nearPlane));
-}
-
-float shadowDepthToDistance(vec3 direction, float depth)
-{
-    float forwardComponent = max(max(abs(direction.x), abs(direction.y)), abs(direction.z));
-    forwardComponent = max(forwardComponent, 0.0001);
-    float viewDepth = linearizeShadowDepth(depth);
-    return viewDepth / forwardComponent;
-}
-
 float calculateShadow(vec3 surfaceWorldPosition)
 {
     if (LightHasShadows < 0.5)
@@ -70,28 +54,7 @@ float calculateShadow(vec3 surfaceWorldPosition)
         return 1.0;
     }
 
-    vec3 toSurface = surfaceWorldPosition - LightPositionWorld;
-    float currentDistance = length(toSurface);
-
-    if (currentDistance <= 0.001)
-    {
-        return 1.0;
-    }
-
-    vec3 direction = normalize(toSurface);
-    float shadowDepth = texture(ShadowSampler, direction).r;
-
-    if (shadowDepth >= 0.999999)
-    {
-        return 1.0;
-    }
-
-    float closestDistance = shadowDepthToDistance(direction, shadowDepth);
-
-    if (closestDistance < currentDistance - ShadowBias)
-    {
-        return 0.0;
-    }
+    // tbd
 
     return 1.0;
 }
@@ -103,63 +66,9 @@ float calculateSoftShadow(vec3 surfaceWorldPosition)
         return 1.0;
     }
 
-    vec3 toSurface = surfaceWorldPosition - LightPositionWorld;
-    float currentDistance = length(toSurface);
+    // tbd
 
-    if (currentDistance <= 0.001)
-    {
-        return 1.0;
-    }
-
-    vec3 direction = normalize(toSurface);
-
-    vec3 up = abs(direction.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 tangent = normalize(cross(up, direction));
-    vec3 bitangent = normalize(cross(direction, tangent));
-
-    float kernel = 0.0025 + 0.0075 * (currentDistance / LightRadius);
-    float visible = 0.0;
-
-    const int SAMPLES = 9;
-    vec2 offsets[SAMPLES];
-
-    offsets[0] = vec2(0.0, 0.0);
-    offsets[1] = vec2(1.0, 0.0);
-    offsets[2] = vec2(-1.0, 0.0);
-    offsets[3] = vec2(0.0, 1.0);
-    offsets[4] = vec2(0.0, -1.0);
-    offsets[5] = vec2(0.707, 0.707);
-    offsets[6] = vec2(-0.707, 0.707);
-    offsets[7] = vec2(0.707, -0.707);
-    offsets[8] = vec2(-0.707, -0.707);
-
-    for (int i = 0; i < SAMPLES; i++)
-    {
-        vec3 sampleDirection =  normalize(
-                direction +
-                tangent *
-                offsets[i].x *
-                kernel +
-                bitangent *
-                offsets[i].y *
-                kernel);
-        float shadowDepth = texture(ShadowSampler, sampleDirection).r;
-
-        if (shadowDepth >= 0.999999)
-        {
-            visible += 1.0;
-            continue;
-        }
-
-        float closestDistance = shadowDepthToDistance(sampleDirection, shadowDepth);
-
-        if (closestDistance >= currentDistance - ShadowBias)
-        {
-            visible += 1.0;
-        }
-    }
-
-    return visible / float(SAMPLES);
+    return 1.0;
 }
 
 bool intersectSphere(vec3 rayDir, vec3 center, float radius, out float t0, out float t1)

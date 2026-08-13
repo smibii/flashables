@@ -1,0 +1,9 @@
+{
+  "key.flashables.toggle": "Toggle Flashlight",
+  "key.categories.flashables": "Flashables",
+
+  "item.flashables.flashlight": "Flashlight",
+  "item.flashables.battery": "Battery",
+
+  "itemGroup.flashables.flashables": "Flashables"
+}

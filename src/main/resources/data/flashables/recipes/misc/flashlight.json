@@ -1,0 +1,19 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_iron": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": { "items": [ { "item": "minecraft:iron_ingot" } ] }
+    },
+    "has_lamp": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": { "items": [ { "item": "minecraft:redstone_lamp" } ] }
+    }
+  },
+  "requirements": [
+    [ "has_iron", "has_lamp" ]
+  ],
+  "rewards": {
+    "recipes": [ "flashables:flashlight_recipe" ]
+  }
+}

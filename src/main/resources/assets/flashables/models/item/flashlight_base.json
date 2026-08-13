@@ -1,0 +1,89 @@
+{
+	"format_version": "1.9.0",
+	"credit": "Made with Blockbench",
+	"textures": {
+		"0": "flashlight_default",
+		"particle": "flashlight_pink"
+	},
+	"elements": [
+		{
+			"from": [7, 0, 6],
+			"to": [9, 2, 12],
+			"rotation": {"angle": 0, "axis": "y", "origin": [7, 0, 6]},
+			"faces": {
+				"north": {"uv": [8, 8, 10, 10], "texture": "#0"},
+				"east": {"uv": [4, 0, 10, 2], "texture": "#0"},
+				"south": {"uv": [10, 0, 12, 2], "texture": "#0"},
+				"west": {"uv": [4, 2, 10, 4], "texture": "#0"},
+				"up": {"uv": [6, 10, 4, 4], "texture": "#0"},
+				"down": {"uv": [8, 4, 6, 10], "texture": "#0"}
+			}
+		},
+		{
+			"from": [6, -1, 4],
+			"to": [10, 3, 6],
+			"rotation": {"angle": 0, "axis": "y", "origin": [7, 0, 6]},
+			"faces": {
+				"north": {"uv": [0, 0, 4, 4], "texture": "#0"},
+				"east": {"uv": [0, 8, 2, 12], "texture": "#0"},
+				"south": {"uv": [0, 4, 4, 8], "texture": "#0"},
+				"west": {"uv": [2, 8, 4, 12], "texture": "#0"},
+				"up": {"uv": [12, 6, 8, 4], "texture": "#0"},
+				"down": {"uv": [12, 6, 8, 8], "texture": "#0"}
+			}
+		}
+	],
+	"display": {
+		"thirdperson_righthand": {
+			"rotation": [71, 0, 0],
+			"translation": [0, 2.5, 7]
+		},
+		"thirdperson_lefthand": {
+			"rotation": [66, 0, 0],
+			"translation": [0, 3.75, 6.5]
+		},
+		"firstperson_righthand": {
+			"rotation": [0, -1, 0],
+			"translation": [0, 8.25, 0.25]
+		},
+		"firstperson_lefthand": {
+			"rotation": [0, -7, 0],
+			"translation": [0, 7.25, 0]
+		},
+		"ground": {
+			"translation": [0, 5.5, 0],
+			"scale": [0.75, 0.75, 0.75]
+		},
+		"gui": {
+			"rotation": [35, -142, 0],
+			"translation": [-0.75, 9.25, 0],
+			"scale": [1.5, 1.5, 1.5]
+		},
+		"head": {
+			"translation": [0, 11.25, -4.25]
+		},
+		"fixed": {
+			"rotation": [0, -87, 0],
+			"translation": [0, 10.25, 0],
+			"scale": [1.5, 1.5, 1.5]
+		}
+	},
+	"overrides": [
+		{ "predicate": { "flashables:color": 1 },  "model": "flashables:item/flashlight_white" },
+		{ "predicate": { "flashables:color": 2 },  "model": "flashables:item/flashlight_light_gray" },
+		{ "predicate": { "flashables:color": 3 },  "model": "flashables:item/flashlight_gray" },
+		{ "predicate": { "flashables:color": 4 },  "model": "flashables:item/flashlight_black" },
+		{ "predicate": { "flashables:color": 5 },  "model": "flashables:item/flashlight_brown" },
+		{ "predicate": { "flashables:color": 6 },  "model": "flashables:item/flashlight_red" },
+		{ "predicate": { "flashables:color": 7 },  "model": "flashables:item/flashlight_orange" },
+		{ "predicate": { "flashables:color": 8 },  "model": "flashables:item/flashlight_yellow" },
+		{ "predicate": { "flashables:color": 9 },  "model": "flashables:item/flashlight_lime" },
+		{ "predicate": { "flashables:color": 10 }, "model": "flashables:item/flashlight_green" },
+		{ "predicate": { "flashables:color": 11 }, "model": "flashables:item/flashlight_cyan" },
+		{ "predicate": { "flashables:color": 12 }, "model": "flashables:item/flashlight_light_blue" },
+		{ "predicate": { "flashables:color": 13 }, "model": "flashables:item/flashlight_blue" },
+		{ "predicate": { "flashables:color": 14 }, "model": "flashables:item/flashlight_purple" },
+		{ "predicate": { "flashables:color": 15 }, "model": "flashables:item/flashlight_magenta" },
+		{ "predicate": { "flashables:color": 16 }, "model": "flashables:item/flashlight_pink" }
+	]
+}

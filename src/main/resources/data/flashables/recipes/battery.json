@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " i ",
+    "iri",
+    "iri"
+  ],
+  "key": {
+    "i": { "item": "minecraft:iron_ingot" },
+    "r": { "item": "minecraft:redstone" }
+  },
+  "result": {
+    "item": "flashables:battery",
+    "count": 16
+  }
+}

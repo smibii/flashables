@@ -66,7 +66,7 @@ public class FlashlightRecipe extends CustomRecipe {
         if (mapped != null) color = mapped;
 
         ItemStack out = new ItemStack(FlashablesItems.FLASHLIGHT.get());
-        out.getOrCreateTag().putInt("color", color);
+        out.getOrCreateTag().putInt("Color", color);
         out.getOrCreateTag().putInt("Power", 0);
         return out;
     }

@@ -68,7 +68,7 @@ public class RecolorFlashlightRecipe extends CustomRecipe {
         if (!flashlight.isEmpty() && flashlight.hasTag()) {
             out.setTag(flashlight.getTag().copy());
         }
-        out.getOrCreateTag().putInt("color", color);
+        out.getOrCreateTag().putInt("Color", color);
         return out;
     }
 

@@ -1,4 +1,5 @@
 {
+
   "criteria": {
     "has_iron": {
       "trigger": "minecraft:inventory_changed",

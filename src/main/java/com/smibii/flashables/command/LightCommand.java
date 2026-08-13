@@ -11,6 +11,10 @@ import com.smibii.flashables.helper.*;
 import com.smibii.flashables.light.LightState;
 import com.smibii.flashables.light.PointLight;
 import com.smibii.flashables.light.SpotLight;
+import com.smibii.flashables.light.config.BuiltInConfigs;
+import com.smibii.flashables.light.config.ConfigManager;
+import com.smibii.flashables.light.config.LightConfig;
+import com.smibii.flashables.light.config.builtin.BuiltInConfigData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
@@ -20,11 +24,8 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.joml.Vector3f;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 
 @Mod.EventBusSubscriber
@@ -33,6 +34,16 @@ public class LightCommand {
 
     private static final SubCommandBuilder LIST = ROOT.sub("list");
     private static final SubCommandBuilder CLEAR = ROOT.sub("clear");
+
+    private static final SubCommandBuilder CONFIG = ROOT.sub("config");
+    private static final SubCommandBuilder CONFIG_RELOAD = CONFIG.sub("reload");
+
+    private static final SubCommandBuilder CONFIG_REGISTRY = CONFIG.sub("registry");
+    private static final SubCommandBuilder CONFIG_REGISTRY_LIST = CONFIG_REGISTRY.sub("list");
+
+    private static final SubCommandBuilder CONFIG_REGISTRY_GET = CONFIG_REGISTRY.sub("get");
+    private static final ArgumentBuilder<String> CONFIG_REGISTRY_GET_FILE = CONFIG_REGISTRY_GET.argument("file", StringArgumentType.string());
+    private static final ArgumentBuilder<String> CONFIG_REGISTRY_GET_FILE_PROPERTY = CONFIG_REGISTRY_GET_FILE.argument("property", StringArgumentType.string());
 
     private static final SubCommandBuilder POINT = ROOT.sub("point");
     private static final SubCommandBuilder ADD_POINT = POINT.sub("add");
@@ -138,6 +149,15 @@ public class LightCommand {
 
         ROOT.requires(2);
 
+        LIST.executes(LightCommand::list);
+        CLEAR.executes(LightCommand::clear);
+
+        CONFIG_RELOAD.executes(LightCommand::configReload);
+        CONFIG_REGISTRY_LIST.executes(LightCommand::configRegistryList);
+        CONFIG_REGISTRY_GET_FILE.suggest(ConfigManager.configs().keySet());
+        CONFIG_REGISTRY_GET_FILE_PROPERTY.suggest(BuiltInConfigData.properties());
+        CONFIG_REGISTRY_GET_FILE_PROPERTY.executes(LightCommand::configRegistryGetFileProperty);
+
         ADD_POINT.executes(LightCommand::spawnPoint);
         ADD_POINT_RADIUS.executes(LightCommand::spawnPoint);
         ADD_POINT_INTENSITY.executes(LightCommand::spawnPoint);
@@ -146,9 +166,6 @@ public class LightCommand {
         ADD_SPOT_RADIUS.executes(LightCommand::spawnSpot);
         ADD_SPOT_INTENSITY.executes(LightCommand::spawnSpot);
         ADD_SPOT_ANGLE.executes(LightCommand::spawnSpot);
-
-        LIST.executes(LightCommand::list);
-        CLEAR.executes(LightCommand::clear);
 
         REMOVE_POINT_INDEX.executes(LightCommand::removePoint);
         REMOVE_SPOT_INDEX.executes(LightCommand::removeSpot);
@@ -181,6 +198,47 @@ public class LightCommand {
         SPOT_STATE_SET_NAME.executes(LightCommand::spotStateSet);
 
         dispatcher.register(ROOT.build());
+    }
+
+    private static int list(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+
+        int points = LightRegistry.getPointLights().size();
+        int spots = LightRegistry.getSpotLights().size();
+
+        return CommandUtils.success(source, points + " point light(s), " + spots + " spot light(s)");
+    }
+
+    private static int clear(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        LightRegistry.clear();
+        return CommandUtils.success(source, "Cleared all lights!");
+    }
+
+    private static int configReload(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        ConfigManager.init();
+        return CommandUtils.success(source, "Config reloaded!");
+    }
+
+    private static int configRegistryList(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        Set<String> configs = ConfigManager.configs().keySet();
+        return CommandUtils.success(source, configs.size() + " config(s) registered: " + configs);
+    }
+
+    private static int configRegistryGetFileProperty(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        Map<String, LightConfig> configs = ConfigManager.configs();
+        String file = StringArgumentType.getString(context, "file");
+        String property = StringArgumentType.getString(context, "property");
+
+        if (!configs.containsKey(file)) return CommandUtils.success(source, "Config file \"" + file + "\" not found!");
+        if (!BuiltInConfigData.properties().contains(property)) return CommandUtils.success(source, "Config doesn't have a property called \"" + file + "\"!");
+
+        LightConfig config = configs.get(file);
+        Object value = config.property(property);
+        return CommandUtils.success(source, "Property \"" + property + "\" has value \"" + value + "\"");
     }
 
     private static void registerList(ArgumentBuilder<String> sub, String type, Set<String> set) {
@@ -248,21 +306,6 @@ public class LightCommand {
 
         int index = LightRegistry.getSpotLights().size() - 1;
         return CommandUtils.success(source, "Spawned spot light #" + index);
-    }
-
-    private static int list(CommandContext<CommandSourceStack> context) {
-        CommandSourceStack source = context.getSource();
-
-        int points = LightRegistry.getPointLights().size();
-        int spots = LightRegistry.getSpotLights().size();
-
-        return CommandUtils.success(source, points + " point light(s), " + spots + " spot light(s)");
-    }
-
-    private static int clear(CommandContext<CommandSourceStack> context) {
-        CommandSourceStack source = context.getSource();
-        LightRegistry.clear();
-        return CommandUtils.success(source, "Cleared all lights");
     }
 
     private static int removePoint(CommandContext<CommandSourceStack> context) {

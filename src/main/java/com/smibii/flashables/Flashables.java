@@ -1,6 +1,7 @@
 package com.smibii.flashables;
 
 import com.smibii.flashables.crafting.RecipeSerializers;
+import com.smibii.flashables.light.config.ConfigManager;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;

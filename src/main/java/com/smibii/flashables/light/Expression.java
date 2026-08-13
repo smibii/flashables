@@ -37,24 +37,16 @@ public final class Expression {
         return root.evaluate(context);
     }
 
-    /*
-     * ============================================================
-     * Evaluation
-     * ============================================================
-     */
-
     private record EvaluationContext(
             double time,
             Map<String, Double> variables
-    ) {
-    }
+    ) {}
 
     private interface Node {
         double evaluate(EvaluationContext context);
     }
 
     private record NumberNode(double value) implements Node {
-
         @Override
         public double evaluate(EvaluationContext context) {
             return value;
@@ -62,10 +54,8 @@ public final class Expression {
     }
 
     private record VariableNode(String name) implements Node {
-
         @Override
         public double evaluate(EvaluationContext context) {
-
             if (name.equals("time")) {
                 return context.time();
             }
@@ -86,7 +76,6 @@ public final class Expression {
             char operator,
             Node value
     ) implements Node {
-
         @Override
         public double evaluate(EvaluationContext context) {
 
@@ -108,7 +97,6 @@ public final class Expression {
             char operator,
             Node right
     ) implements Node {
-
         @Override
         public double evaluate(EvaluationContext context) {
 
@@ -135,7 +123,6 @@ public final class Expression {
             String name,
             List<Node> arguments
     ) implements Node {
-
         @Override
         public double evaluate(EvaluationContext context) {
 
@@ -150,23 +137,14 @@ public final class Expression {
     }
 
     private record ConstantNode(double value) implements Node {
-
         @Override
         public double evaluate(EvaluationContext context) {
             return value;
         }
     }
 
-    /*
-     * ============================================================
-     * Functions
-     * ============================================================
-     */
-
     private static final class Functions {
-
-        private Functions() {
-        }
+        private Functions() {}
 
         private static double call(
                 String name,
@@ -175,62 +153,27 @@ public final class Expression {
             String function = name.toLowerCase(Locale.ROOT);
 
             return switch (function) {
-
-                case "sin" ->
-                        unary(function, args, Math::sin);
-
-                case "cos" ->
-                        unary(function, args, Math::cos);
-
-                case "tan" ->
-                        unary(function, args, Math::tan);
-
-                case "asin" ->
-                        unary(function, args, Math::asin);
-
-                case "acos" ->
-                        unary(function, args, Math::acos);
-
-                case "atan" ->
-                        unary(function, args, Math::atan);
-
-                case "sqrt" ->
-                        unary(function, args, Math::sqrt);
-
-                case "abs" ->
-                        unary(function, args, Math::abs);
-
-                case "floor" ->
-                        unary(function, args, Math::floor);
-
-                case "ceil" ->
-                        unary(function, args, Math::ceil);
-
-                case "round" ->
-                        unary(function, args, value ->
-                                Math.round(value)
-                        );
-
-                case "exp" ->
-                        unary(function, args, Math::exp);
-
-                case "log" ->
-                        unary(function, args, Math::log);
-
-                case "log10" ->
-                        unary(function, args, Math::log10);
-
+                case "sin" -> unary(function, args, Math::sin);
+                case "cos" -> unary(function, args, Math::cos);
+                case "tan" -> unary(function, args, Math::tan);
+                case "asin" -> unary(function, args, Math::asin);
+                case "acos" -> unary(function, args, Math::acos);
+                case "atan" -> unary(function, args, Math::atan);
+                case "sqrt" -> unary(function, args, Math::sqrt);
+                case "abs" -> unary(function, args, Math::abs);
+                case "floor" -> unary(function, args, Math::floor);
+                case "ceil" -> unary(function, args, Math::ceil);
+                case "round" -> unary(function, args, value -> Math.round(value));
+                case "exp" -> unary(function, args, Math::exp);
+                case "log" -> unary(function, args, Math::log);
+                case "log10" -> unary(function, args, Math::log10);
                 case "random" -> {
-
                     requireArgs(function, args, 0);
-
                     yield Math.random();
                 }
 
                 case "min" -> {
-
                     requireArgs(function, args, 2);
-
                     double result = args.get(0);
 
                     for (int i = 1; i < args.size(); i++) {
@@ -241,9 +184,7 @@ public final class Expression {
                 }
 
                 case "max" -> {
-
                     requireArgs(function, args, 2);
-
                     double result = args.get(0);
 
                     for (int i = 1; i < args.size(); i++) {
@@ -254,7 +195,6 @@ public final class Expression {
                 }
 
                 case "pow" -> {
-
                     requireArgs(function, args, 2);
 
                     yield Math.pow(
@@ -264,7 +204,6 @@ public final class Expression {
                 }
 
                 case "clamp" -> {
-
                     requireArgs(function, args, 3);
 
                     double value = args.get(0);
@@ -289,7 +228,6 @@ public final class Expression {
                 DoubleUnaryOperation operation
         ) {
             requireArgs(name, args, 1);
-
             return operation.apply(args.get(0));
         }
 
@@ -312,26 +250,7 @@ public final class Expression {
         }
     }
 
-    /*
-     * ============================================================
-     * Parser
-     *
-     * Grammar:
-     *
-     * expression  = addition
-     * addition    = multiplication (('+' | '-') multiplication)*
-     * multiplication = power (('*' | '/' | '%') power)*
-     * power       = unary ('^' unary)*
-     * unary       = ('+' | '-') unary | primary
-     * primary     = number
-     *             | identifier
-     *             | identifier '(' arguments ')'
-     *             | '(' expression ')'
-     * ============================================================
-     */
-
     private static final class Parser {
-
         private final String input;
         private int position;
 
@@ -354,11 +273,9 @@ public final class Expression {
         }
 
         private Node parseAddition() {
-
             Node left = parseMultiplication();
 
             while (true) {
-
                 skipWhitespace();
 
                 if (match('+')) {
@@ -369,7 +286,6 @@ public final class Expression {
                             '+',
                             right
                     );
-
                 } else if (match('-')) {
                     Node right = parseMultiplication();
 
@@ -378,7 +294,6 @@ public final class Expression {
                             '-',
                             right
                     );
-
                 } else {
                     break;
                 }
@@ -388,40 +303,20 @@ public final class Expression {
         }
 
         private Node parseMultiplication() {
-
             Node left = parsePower();
 
             while (true) {
-
                 skipWhitespace();
 
                 if (match('*')) {
                     Node right = parsePower();
-
-                    left = new BinaryNode(
-                            left,
-                            '*',
-                            right
-                    );
-
+                    left = new BinaryNode(left, '*', right);
                 } else if (match('/')) {
                     Node right = parsePower();
-
-                    left = new BinaryNode(
-                            left,
-                            '/',
-                            right
-                    );
-
+                    left = new BinaryNode(left, '/', right);
                 } else if (match('%')) {
                     Node right = parsePower();
-
-                    left = new BinaryNode(
-                            left,
-                            '%',
-                            right
-                    );
-
+                    left = new BinaryNode(left, '%', right);
                 } else {
                     break;
                 }
@@ -431,48 +326,32 @@ public final class Expression {
         }
 
         private Node parsePower() {
-
             Node left = parseUnary();
-
             skipWhitespace();
 
             if (match('^')) {
-
                 Node right = parsePower();
-
-                return new BinaryNode(
-                        left,
-                        '^',
-                        right
-                );
+                return new BinaryNode(left, '^', right);
             }
 
             return left;
         }
 
         private Node parseUnary() {
-
             skipWhitespace();
 
             if (match('+')) {
-                return new UnaryNode(
-                        '+',
-                        parseUnary()
-                );
+                return new UnaryNode('+', parseUnary());
             }
 
             if (match('-')) {
-                return new UnaryNode(
-                        '-',
-                        parseUnary()
-                );
+                return new UnaryNode('-', parseUnary());
             }
 
             return parsePrimary();
         }
 
         private Node parsePrimary() {
-
             skipWhitespace();
 
             if (match('(')) {
@@ -480,11 +359,7 @@ public final class Expression {
                 Node expression = parseExpression();
 
                 skipWhitespace();
-
-                expect(
-                        ')',
-                        "Expected ')'"
-                );
+                expect(')', "Expected ')'");
 
                 return expression;
             }
@@ -503,13 +378,10 @@ public final class Expression {
         }
 
         private Node parseNumber() {
-
             int start = position;
-
             boolean hasDecimal = false;
 
             while (!isAtEnd()) {
-
                 char c = peek();
 
                 if (isDigit(c)) {
@@ -532,10 +404,7 @@ public final class Expression {
              * 1e3
              * 1.5e-2
              */
-
-            if (!isAtEnd() &&
-                    (peek() == 'e' || peek() == 'E')) {
-
+            if (!isAtEnd() && (peek() == 'e' || peek() == 'E')) {
                 position++;
 
                 if (!isAtEnd() &&
@@ -565,7 +434,6 @@ public final class Expression {
         }
 
         private Node parseIdentifier() {
-
             int start = position;
 
             while (!isAtEnd() &&
@@ -585,9 +453,7 @@ public final class Expression {
              * Math.random
              * Math.PI
              */
-
             if (match('.')) {
-
                 int memberStart = position;
 
                 while (!isAtEnd() &&
@@ -683,7 +549,6 @@ public final class Expression {
         }
 
         private String normalizeFunction(String name) {
-
             if (name.startsWith("Math.")) {
                 return name.substring(5);
             }

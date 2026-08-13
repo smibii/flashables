@@ -2,6 +2,7 @@ package com.smibii.flashables.client.event;
 
 import com.smibii.flashables.Flashables;
 import com.smibii.flashables.FlashablesItems;
+import com.smibii.flashables.light.config.ConfigManager;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.item.ItemProperties;
 import net.minecraft.world.entity.LivingEntity;
@@ -11,8 +12,8 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 
 @Mod.EventBusSubscriber(bus = Mod.EventBusSubscriber.Bus.MOD)
-public class ItemPropertyEvent {
-    private ItemPropertyEvent() {}
+public class ClientSetup {
+    private ClientSetup() {}
 
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
@@ -27,6 +28,7 @@ public class ItemPropertyEvent {
                         return 0.0f;
                     }
             );
+            ConfigManager.init();
         });
     }
 }

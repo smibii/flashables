@@ -3,6 +3,7 @@ package com.smibii.flashables.client.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.smibii.flashables.client.light.LightRegistry;
+import com.smibii.flashables.helper.Logger;
 import com.smibii.flashables.light.PointLight;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -96,6 +97,7 @@ public final class PointLightRenderer {
         shader.getUniform("LightVolumetricStep").set(light.getVolumetricStep());
 
         float multiplier = LightEnvironment.getMultiplier(minecraft.level, position, light.getRadius());
+        Logger.info(multiplier);
         shader.getUniform("LightMultiplier").set(multiplier);
         shader.getUniform("CameraPositionWorld").set((float) camera.x, (float) camera.y, (float) camera.z);
         shader.getUniform("ScreenSize").set((float) minecraft.getWindow().getWidth(), (float) minecraft.getWindow().getHeight());

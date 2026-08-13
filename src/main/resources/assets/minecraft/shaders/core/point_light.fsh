@@ -4,7 +4,6 @@ uniform float GameTime;
 
 uniform sampler2D DepthSampler;
 uniform sampler2D SceneSampler;
-uniform samplerCube ShadowSampler;
 
 uniform mat4 ModelViewMat;
 uniform mat4 InvProjMat;
@@ -18,7 +17,6 @@ uniform vec3 LightColor;
 uniform float LightIntensity;
 uniform float LightRadius;
 uniform float LightMultiplier;
-uniform float ShadowBias;
 uniform float LightHasShadows;
 uniform float LightVolumetric;
 uniform float LightVolumetricStrength;

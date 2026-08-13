@@ -11,10 +11,6 @@
     }
   ],
 
-  "attributes": [
-    "Position"
-  ],
-
   "uniforms": [
     {
       "name": "GameTime",

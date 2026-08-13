@@ -335,14 +335,12 @@ void main()
             float amount = NdotL * attenuation * spot * LightIntensity * LightMultiplier * shadow;
 
             vec3 lightColor = LightColor * cookie * amount;
-            contribution = step(vec3(0.5), baseColor) *
-            (vec3(1.0) - 2.0 *
-            (vec3(1.0) - baseColor) *
-            (vec3(1.0) - lightColor)) +
-            (vec3(1.0) - step(vec3(0.5), baseColor)) *
-            (2.0 * baseColor * lightColor);
-
-            contribution += baseColor;
+            vec3 blendInput = max(vec3(0.5) + lightColor * 0.5, vec3(0.0));
+            contribution = mix(
+                    2.0 * baseColor * blendInput,
+                    vec3(1.0) - 2.0 * (vec3(1.0) - baseColor) * (vec3(1.0) - blendInput),
+                    step(vec3(0.5), baseColor)
+            );
         }
     }
 
@@ -361,7 +359,7 @@ void main()
         contribution = vec3(1.0) - (vec3(1.0) - contribution) * (vec3(1.0) - volumetric);
     }
 
-    contribution = min(contribution, vec3(1.0));
+    // contribution = min(contribution, vec3(1.0));
 
     fragColor = vec4(contribution, 1.0);
 }

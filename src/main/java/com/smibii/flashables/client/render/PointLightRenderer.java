@@ -97,7 +97,6 @@ public final class PointLightRenderer {
         shader.getUniform("LightVolumetricStep").set(light.getVolumetricStep());
 
         float multiplier = LightEnvironment.getMultiplier(minecraft.level, position, light.getRadius());
-        Logger.info(multiplier);
         shader.getUniform("LightMultiplier").set(multiplier);
         shader.getUniform("CameraPositionWorld").set((float) camera.x, (float) camera.y, (float) camera.z);
         shader.getUniform("ScreenSize").set((float) minecraft.getWindow().getWidth(), (float) minecraft.getWindow().getHeight());
